@@ -28,7 +28,14 @@ export default function App() {
   const [isMobile, setIsMobile] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [orgSettings, setOrgSettings] = useState<any>(null);
+  const [orgSettings, setOrgSettings] = useState<any>(() => {
+    try {
+      const saved = localStorage.getItem('dc_org_settings');
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      return null;
+    }
+  });
 
   const fetchOrgSettings = () => {
     fetch('/api/settings')
@@ -36,10 +43,19 @@ export default function App() {
       .then(data => {
         if (data && data.settings) {
           setOrgSettings(data.settings);
+          localStorage.setItem('dc_org_settings', JSON.stringify(data.settings));
         }
       })
       .catch(err => console.error("Error fetching org settings in App.tsx:", err));
   };
+
+  useEffect(() => {
+    if (orgSettings?.name) {
+      document.title = orgSettings.name;
+    } else {
+      document.title = "DCEDUPayFee";
+    }
+  }, [orgSettings]);
 
   useEffect(() => {
     const savedUser = localStorage.getItem('dc_user');

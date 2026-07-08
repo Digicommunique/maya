@@ -72,6 +72,7 @@ export default function Settings() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data.settings)
     }).then(() => {
+      localStorage.setItem('dc_org_settings', JSON.stringify(data.settings));
       alert('Settings saved successfully!');
       window.dispatchEvent(new Event('org-settings-updated'));
     });

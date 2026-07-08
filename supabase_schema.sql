@@ -149,5 +149,17 @@ CREATE POLICY "Allow write on fee_heads" ON fee_heads FOR ALL USING (auth.role()
 CREATE POLICY "Allow write on students" ON students FOR ALL USING (auth.role() IN ('anon', 'authenticated')) WITH CHECK (auth.role() IN ('anon', 'authenticated'));
 CREATE POLICY "Allow write on transactions" ON transactions FOR ALL USING (auth.role() IN ('anon', 'authenticated')) WITH CHECK (auth.role() IN ('anon', 'authenticated'));
 
--- Fix rls_auto_enable() function warnings to switch to SECURITY INVOKER
-ALTER FUNCTION IF EXISTS public.rls_auto_enable() SECURITY INVOKER;
+-- Fix rls_auto_enable() function warnings safely if it exists
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 
+        FROM pg_proc p 
+        JOIN pg_namespace n ON p.pronamespace = n.oid 
+        WHERE n.nspname = 'public' AND p.proname = 'rls_auto_enable'
+    ) THEN
+        EXECUTE 'ALTER FUNCTION public.rls_auto_enable() SECURITY INVOKER;';
+        EXECUTE 'REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM PUBLIC, anon, authenticated;';
+    END IF;
+END
+$$;
