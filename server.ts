@@ -545,6 +545,11 @@ app.all("/api/*", (req, res) => {
 });
 
 async function startApp() {
+  if (process.env.VERCEL) {
+    console.log("Running in Vercel Serverless environment. Express router initialized.");
+    return;
+  }
+
   const PORT = 3000;
   console.log("Starting application...");
   
