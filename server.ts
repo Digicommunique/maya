@@ -1,5 +1,4 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createClient } from "@supabase/supabase-js";
@@ -7,8 +6,16 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+let __filename = "";
+let __dirname = "";
+try {
+  // @ts-ignore
+  __filename = fileURLToPath(import.meta.url);
+  __dirname = path.dirname(__filename);
+} catch (e) {
+  __filename = typeof __filename !== "undefined" ? __filename : "";
+  __dirname = typeof __dirname !== "undefined" ? __dirname : process.cwd();
+}
 
 const supabaseUrl = process.env.SUPABASE_URL || "";
 const supabaseKey = process.env.SUPABASE_KEY || "";
@@ -34,6 +41,18 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json({ limit: '10mb' }));
+
+// Middleware to ensure database is configured properly
+app.use("/api", (req, res, next) => {
+  if (!supabase) {
+    console.error("[DATABASE ERROR] Supabase client is not initialized.");
+    return res.status(500).json({ 
+      error: "DATABASE_NOT_INITIALIZED", 
+      message: "Database connection could not be established. Please make sure that SUPABASE_URL and SUPABASE_KEY are correctly set in your Vercel Project Environment Variables." 
+    });
+  }
+  next();
+});
 
 // API Routes
 const apiRouter = express.Router();
@@ -556,6 +575,7 @@ async function startApp() {
   // Vite/Static Serving
   if (process.env.NODE_ENV !== "production") {
     console.log("Using Vite middleware (Development)");
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
