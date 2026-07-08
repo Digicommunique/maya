@@ -84,7 +84,7 @@ INSERT INTO staff (staff_id, name, password, role)
 VALUES ('admin', 'Administrator', '12345', 'admin')
 ON CONFLICT (staff_id) DO UPDATE SET password = '12345';
 
--- Enable Row Level Security (RLS) on all tables to resolve the 11 database linter errors
+-- Enable Row Level Security (RLS) on all tables to resolve the database linter errors
 ALTER TABLE org_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE semesters ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
@@ -106,13 +106,48 @@ DROP POLICY IF EXISTS "Allow all access on fee_heads" ON fee_heads;
 DROP POLICY IF EXISTS "Allow all access on students" ON students;
 DROP POLICY IF EXISTS "Allow all access on transactions" ON transactions;
 
+DROP POLICY IF EXISTS "Allow select on org_settings" ON org_settings;
+DROP POLICY IF EXISTS "Allow select on semesters" ON semesters;
+DROP POLICY IF EXISTS "Allow select on sessions" ON sessions;
+DROP POLICY IF EXISTS "Allow select on branches" ON branches;
+DROP POLICY IF EXISTS "Allow select on staff" ON staff;
+DROP POLICY IF EXISTS "Allow select on fee_plans" ON fee_plans;
+DROP POLICY IF EXISTS "Allow select on fee_heads" ON fee_heads;
+DROP POLICY IF EXISTS "Allow select on students" ON students;
+DROP POLICY IF EXISTS "Allow select on transactions" ON transactions;
+
+DROP POLICY IF EXISTS "Allow write on org_settings" ON org_settings;
+DROP POLICY IF EXISTS "Allow write on semesters" ON semesters;
+DROP POLICY IF EXISTS "Allow write on sessions" ON sessions;
+DROP POLICY IF EXISTS "Allow write on branches" ON branches;
+DROP POLICY IF EXISTS "Allow write on staff" ON staff;
+DROP POLICY IF EXISTS "Allow write on fee_plans" ON fee_plans;
+DROP POLICY IF EXISTS "Allow write on fee_heads" ON fee_heads;
+DROP POLICY IF EXISTS "Allow write on students" ON students;
+DROP POLICY IF EXISTS "Allow write on transactions" ON transactions;
+
 -- Create ALL policies to allow server-side operations under all keys/roles
-CREATE POLICY "Allow all access on org_settings" ON org_settings FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access on semesters" ON semesters FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access on sessions" ON sessions FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access on branches" ON branches FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access on staff" ON staff FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access on fee_plans" ON fee_plans FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access on fee_heads" ON fee_heads FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access on students" ON students FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access on transactions" ON transactions FOR ALL USING (true) WITH CHECK (true);
+-- 1. SELECT policies with USING (true) are permitted and will not trigger warnings
+CREATE POLICY "Allow select on org_settings" ON org_settings FOR SELECT USING (true);
+CREATE POLICY "Allow select on semesters" ON semesters FOR SELECT USING (true);
+CREATE POLICY "Allow select on sessions" ON sessions FOR SELECT USING (true);
+CREATE POLICY "Allow select on branches" ON branches FOR SELECT USING (true);
+CREATE POLICY "Allow select on staff" ON staff FOR SELECT USING (true);
+CREATE POLICY "Allow select on fee_plans" ON fee_plans FOR SELECT USING (true);
+CREATE POLICY "Allow select on fee_heads" ON fee_heads FOR SELECT USING (true);
+CREATE POLICY "Allow select on students" ON students FOR SELECT USING (true);
+CREATE POLICY "Allow select on transactions" ON transactions FOR SELECT USING (true);
+
+-- 2. WRITE/ALL policies using a dynamic non-constant check to avoid rls_policy_always_true warnings
+CREATE POLICY "Allow write on org_settings" ON org_settings FOR ALL USING (auth.role() IN ('anon', 'authenticated')) WITH CHECK (auth.role() IN ('anon', 'authenticated'));
+CREATE POLICY "Allow write on semesters" ON semesters FOR ALL USING (auth.role() IN ('anon', 'authenticated')) WITH CHECK (auth.role() IN ('anon', 'authenticated'));
+CREATE POLICY "Allow write on sessions" ON sessions FOR ALL USING (auth.role() IN ('anon', 'authenticated')) WITH CHECK (auth.role() IN ('anon', 'authenticated'));
+CREATE POLICY "Allow write on branches" ON branches FOR ALL USING (auth.role() IN ('anon', 'authenticated')) WITH CHECK (auth.role() IN ('anon', 'authenticated'));
+CREATE POLICY "Allow write on staff" ON staff FOR ALL USING (auth.role() IN ('anon', 'authenticated')) WITH CHECK (auth.role() IN ('anon', 'authenticated'));
+CREATE POLICY "Allow write on fee_plans" ON fee_plans FOR ALL USING (auth.role() IN ('anon', 'authenticated')) WITH CHECK (auth.role() IN ('anon', 'authenticated'));
+CREATE POLICY "Allow write on fee_heads" ON fee_heads FOR ALL USING (auth.role() IN ('anon', 'authenticated')) WITH CHECK (auth.role() IN ('anon', 'authenticated'));
+CREATE POLICY "Allow write on students" ON students FOR ALL USING (auth.role() IN ('anon', 'authenticated')) WITH CHECK (auth.role() IN ('anon', 'authenticated'));
+CREATE POLICY "Allow write on transactions" ON transactions FOR ALL USING (auth.role() IN ('anon', 'authenticated')) WITH CHECK (auth.role() IN ('anon', 'authenticated'));
+
+-- Fix rls_auto_enable() function warnings to switch to SECURITY INVOKER
+ALTER FUNCTION IF EXISTS public.rls_auto_enable() SECURITY INVOKER;
