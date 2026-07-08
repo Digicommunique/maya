@@ -4,9 +4,10 @@ import { motion } from 'motion/react';
 
 interface LoginProps {
   onLogin: (staff: any) => void;
+  orgSettings?: any;
 }
 
-export default function Login({ onLogin }: LoginProps) {
+export default function Login({ onLogin, orgSettings }: LoginProps) {
   const [staffId, setStaffId] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -61,10 +62,16 @@ export default function Login({ onLogin }: LoginProps) {
             <div className="absolute bottom-0 left-0 w-32 h-32 bg-blue-500/10 rounded-full -ml-16 -mb-16 blur-3xl" />
             
             <div className="relative z-10">
-              <div className="w-16 h-16 bg-emerald-500 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-emerald-500/20">
-                <ShieldCheck size={32} className="text-white" />
+              <div className="w-16 h-16 bg-emerald-500 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-emerald-500/20 overflow-hidden">
+                {orgSettings?.logo ? (
+                  <img src={orgSettings.logo} alt="Logo" className="w-full h-full object-contain p-2 bg-white" />
+                ) : (
+                  <ShieldCheck size={32} className="text-white" />
+                )}
               </div>
-              <h1 className="text-3xl font-black tracking-tight mb-2">DCEDUPayFee</h1>
+              <h1 className="text-3xl font-black tracking-tight mb-2 truncate max-w-xs mx-auto" title={orgSettings?.name || "DCEDUPayFee"}>
+                {orgSettings?.name || "DCEDUPayFee"}
+              </h1>
               <p className="text-slate-400 text-sm font-medium">Secure Institutional Access</p>
             </div>
           </div>
@@ -130,7 +137,7 @@ export default function Login({ onLogin }: LoginProps) {
         </motion.div>
         
         <p className="text-center mt-8 text-slate-400 text-xs font-medium">
-          &copy; {new Date().getFullYear()} DCEDUPayFee. All rights reserved.
+          &copy; {new Date().getFullYear()} {orgSettings?.name || "DCEDUPayFee"}. All rights reserved.
         </p>
       </div>
     </div>

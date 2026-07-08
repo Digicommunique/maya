@@ -71,7 +71,10 @@ export default function Settings() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data.settings)
-    }).then(() => alert('Settings saved successfully!'));
+    }).then(() => {
+      alert('Settings saved successfully!');
+      window.dispatchEvent(new Event('org-settings-updated'));
+    });
   };
 
   const addItem = (type: 'semester' | 'session' | 'branch') => {

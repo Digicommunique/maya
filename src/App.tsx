@@ -28,6 +28,18 @@ export default function App() {
   const [isMobile, setIsMobile] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [orgSettings, setOrgSettings] = useState<any>(null);
+
+  const fetchOrgSettings = () => {
+    fetch('/api/settings')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.settings) {
+          setOrgSettings(data.settings);
+        }
+      })
+      .catch(err => console.error("Error fetching org settings in App.tsx:", err));
+  };
 
   useEffect(() => {
     const savedUser = localStorage.getItem('dc_user');
@@ -43,7 +55,17 @@ export default function App() {
     };
     checkMobile();
     window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
+
+    fetchOrgSettings();
+    const handleSettingsUpdate = () => {
+      fetchOrgSettings();
+    };
+    window.addEventListener('org-settings-updated', handleSettingsUpdate);
+
+    return () => {
+      window.removeEventListener('resize', checkMobile);
+      window.removeEventListener('org-settings-updated', handleSettingsUpdate);
+    };
   }, []);
 
   const handleLogin = (userData: any) => {
@@ -90,7 +112,7 @@ export default function App() {
     <Routes>
       <Route 
         path="/login" 
-        element={user ? <Navigate to="/dashboard" replace /> : <Login onLogin={handleLogin} />} 
+        element={user ? <Navigate to="/dashboard" replace /> : <Login onLogin={handleLogin} orgSettings={orgSettings} />} 
       />
       
       <Route
@@ -109,11 +131,19 @@ export default function App() {
               >
                 <div className="h-full flex flex-col">
                   <div className="p-6 flex items-center gap-3">
-                    <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-emerald-200">
-                      <CreditCard size={24} />
-                    </div>
-                    <div>
-                      <h1 className="font-bold text-lg leading-tight">DCEDUPayFee</h1>
+                    {orgSettings?.logo ? (
+                      <div className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center bg-slate-50 border border-slate-200 p-1 flex-shrink-0">
+                        <img src={orgSettings.logo} alt="Logo" className="w-full h-full object-contain" />
+                      </div>
+                    ) : (
+                      <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-emerald-200 flex-shrink-0">
+                        <CreditCard size={24} />
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <h1 className="font-bold text-lg leading-tight truncate" title={orgSettings?.name || "DCEDUPayFee"}>
+                        {orgSettings?.name || "DCEDUPayFee"}
+                      </h1>
                       <p className="text-xs text-slate-500 font-medium tracking-tight">by Digital Communique</p>
                     </div>
                   </div>
