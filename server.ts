@@ -1114,6 +1114,18 @@ app.all("/api/*", (req, res) => {
   res.status(404).json({ error: `API route not found: ${req.method} ${req.path}` });
 });
 
+// Global JSON error handler for Express
+app.use((err: any, req: any, res: any, next: any) => {
+  console.error('[GLOBAL SERVER ERROR]', err);
+  if (res.headersSent) {
+    return next(err);
+  }
+  res.status(500).json({
+    error: 'INTERNAL_SERVER_ERROR',
+    message: err?.message || 'An unexpected server error occurred.'
+  });
+});
+
 async function startApp() {
   if (process.env.VERCEL) {
     console.log("Running in Vercel Serverless environment. Express router initialized.");

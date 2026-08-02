@@ -17,6 +17,7 @@ import {
   LineChart as LineIcon,
   Sparkles
 } from 'lucide-react';
+import { safeFetchJson } from '../utils/api';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, subMonths, addMonths } from 'date-fns';
 import { cn } from '../lib/utils';
@@ -62,9 +63,9 @@ export default function Dashboard({ setActiveTab, user }: { setActiveTab: (tab: 
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/summary').then(res => res.json()),
-      fetch('/api/transactions').then(res => res.json()).catch(() => []),
-      fetch('/api/ledger').then(res => res.json()).catch(() => [])
+      safeFetchJson('/api/summary', undefined, null),
+      safeFetchJson('/api/transactions', undefined, []),
+      safeFetchJson('/api/ledger', undefined, [])
     ])
     .then(([summaryData, txsData, ledgerData]) => {
       if (summaryData && !summaryData.error) {

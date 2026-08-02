@@ -17,6 +17,7 @@ import {
   Clock,
   Eye
 } from 'lucide-react';
+import { safeFetchJson } from '../utils/api';
 import { motion, AnimatePresence } from 'motion/react';
 import { Student, Transaction, OrgSettings } from '../types';
 import { cn } from '../lib/utils';
@@ -58,8 +59,7 @@ export default function FeeCollection() {
 
   const loadRecentTransactions = async () => {
     try {
-      const res = await fetch('/api/transactions');
-      const data = await res.json();
+      const data = await safeFetchJson('/api/transactions', undefined, []);
       if (Array.isArray(data)) {
         setRecentTxs(data);
       }
@@ -69,16 +69,16 @@ export default function FeeCollection() {
   };
 
   useEffect(() => {
-    fetch('/api/students')
-      .then(res => res.json())
+    safeFetchJson('/api/students', undefined, [])
       .then(data => Array.isArray(data) ? setStudents(data) : setStudents([]));
     
-    fetch('/api/settings')
-      .then(res => res.json())
+    safeFetchJson('/api/settings', undefined, null)
       .then(data => {
-        setSettings(data.settings);
-        setBranches(data.branches || []);
-        setSemesters(data.semesters || []);
+        if (data) {
+          setSettings(data.settings);
+          setBranches(data.branches || []);
+          setSemesters(data.semesters || []);
+        }
       });
 
     loadRecentTransactions();

@@ -18,6 +18,7 @@ import {
   X
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { safeFetchJson } from '../utils/api';
 import { OrgSettings, Semester, Session, Branch, Staff } from '../types';
 import { cn } from '../lib/utils';
 
@@ -47,16 +48,16 @@ export default function Settings() {
 
   const checkHealth = () => {
     setCheckingHealth(true);
-    fetch('/api/debug/health')
-      .then(res => res.json())
-      .then(setHealth)
+    safeFetchJson('/api/debug/health', undefined, {})
+      .then(res => setHealth(res || {}))
       .finally(() => setCheckingHealth(false));
   };
 
   const fetchData = () => {
-    fetch('/api/settings')
-      .then(res => res.json())
-      .then(setData);
+    safeFetchJson('/api/settings', undefined, null)
+      .then(res => {
+        if (res) setData(res);
+      });
     checkHealth();
   };
 

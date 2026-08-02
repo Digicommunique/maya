@@ -20,6 +20,7 @@ import {
   Printer,
   FileDown
 } from 'lucide-react';
+import { safeFetchJson } from '../utils/api';
 import { motion, AnimatePresence } from 'motion/react';
 import { Student, FeePlan, Branch, Semester, Session, OrgSettings } from '../types';
 import { cn } from '../lib/utils';
@@ -162,9 +163,9 @@ export default function StudentDirectory() {
 
   const fetchData = () => {
     Promise.all([
-      fetch('/api/students').then(res => res.json()),
-      fetch('/api/fee-plans').then(res => res.json()),
-      fetch('/api/settings').then(res => res.json())
+      safeFetchJson('/api/students', undefined, []),
+      safeFetchJson('/api/fee-plans', undefined, []),
+      safeFetchJson('/api/settings', undefined, null)
     ]).then(([studentsData, plansData, settingsData]) => {
       setStudents(Array.isArray(studentsData) ? studentsData : []);
       setPlans(Array.isArray(plansData) ? plansData : []);

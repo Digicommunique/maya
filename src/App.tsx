@@ -19,6 +19,7 @@ import FeePlans from './components/FeePlans';
 import Settings from './components/Settings';
 import FeeCollection from './components/FeeCollection';
 import Reports from './components/Reports';
+import { safeFetchJson } from './utils/api';
 import Login from './components/Login';
 
 export default function App() {
@@ -38,8 +39,7 @@ export default function App() {
   });
 
   const fetchOrgSettings = () => {
-    fetch('/api/settings')
-      .then(res => res.json())
+    safeFetchJson('/api/settings')
       .then(data => {
         if (data && data.settings) {
           setOrgSettings(data.settings);

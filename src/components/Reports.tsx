@@ -36,6 +36,7 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import autoTable from 'jspdf-autotable';
 import { motion, AnimatePresence } from 'motion/react';
+import { safeFetchJson } from '../utils/api';
 import { useNavigate } from 'react-router-dom';
 import { 
   ResponsiveContainer, 
@@ -920,9 +921,10 @@ export default function Reports() {
 
   useEffect(() => {
     refreshData();
-    fetch('/api/settings')
-      .then(res => res.json())
-      .then(data => setSettings(data.settings));
+    safeFetchJson('/api/settings', undefined, null)
+      .then(data => {
+        if (data && data.settings) setSettings(data.settings);
+      });
   }, []);
 
   const [deletingTx, setDeletingTx] = useState<Transaction | null>(null);

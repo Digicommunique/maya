@@ -8,6 +8,7 @@ import {
   CreditCard,
   PlusCircle
 } from 'lucide-react';
+import { safeFetchJson } from '../utils/api';
 import { motion, AnimatePresence } from 'motion/react';
 import { FeePlan, FeeHead } from '../types';
 import { cn } from '../lib/utils';
@@ -27,8 +28,7 @@ export default function FeePlans() {
   });
 
   const fetchPlans = () => {
-    fetch('/api/fee-plans')
-      .then(res => res.json())
+    safeFetchJson('/api/fee-plans', undefined, [])
       .then(data => Array.isArray(data) ? setPlans(data) : setPlans([]))
       .catch(err => {
         console.error("Failed to fetch plans:", err);
