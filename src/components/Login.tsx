@@ -158,7 +158,7 @@ export default function Login({ onLogin, orgSettings }: LoginProps) {
               </motion.div>
             )}
 
-            <div className="space-y-3 pt-2">
+            <div className="pt-2">
               <button 
                 type="submit"
                 disabled={isLoading}
@@ -166,15 +166,6 @@ export default function Login({ onLogin, orgSettings }: LoginProps) {
               >
                 {isLoading ? 'Authenticating...' : 'SIGN IN TO CLOUD'}
                 {!isLoading && <ArrowRight size={16} />}
-              </button>
-
-              <button 
-                type="button"
-                onClick={handleDemoLogin}
-                disabled={isLoading}
-                className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-xl font-bold text-xs tracking-wider uppercase transition-all disabled:opacity-50 cursor-pointer"
-              >
-                Continue as Demo
               </button>
             </div>
           </form>
