@@ -137,7 +137,20 @@ export default function App() {
           !user ? (
             <Navigate to="/login" replace />
           ) : (
-            <div className="min-h-screen bg-[#F8FAFC] flex font-sans text-[#1E293B]">
+            <div className="min-h-screen bg-[#F8FAFC] flex font-sans text-[#1E293B] relative">
+              {/* Mobile Sidebar Backdrop Overlay */}
+              <AnimatePresence>
+                {isMobile && isSidebarOpen && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={() => setIsSidebarOpen(false)}
+                    className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-xs lg:hidden cursor-pointer"
+                  />
+                )}
+              </AnimatePresence>
+
               {/* Sidebar */}
               <aside 
                 className={cn(
@@ -146,25 +159,35 @@ export default function App() {
                 )}
               >
                 <div className="h-full flex flex-col">
-                  <div className="p-6 flex items-center gap-3">
-                    {orgSettings?.logo ? (
-                      <div className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center bg-slate-50 border border-slate-200 p-1 flex-shrink-0">
-                        <img src={orgSettings.logo} alt="Logo" className="w-full h-full object-contain" />
+                  <div className="p-5 sm:p-6 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      {orgSettings?.logo ? (
+                        <div className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center bg-slate-50 border border-slate-200 p-1 flex-shrink-0">
+                          <img src={orgSettings.logo} alt="Logo" className="w-full h-full object-contain" />
+                        </div>
+                      ) : (
+                        <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-emerald-200 flex-shrink-0">
+                          <CreditCard size={24} />
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <h1 className="font-bold text-base sm:text-lg leading-tight truncate" title={orgSettings?.name || "DCEDUPayFee"}>
+                          {orgSettings?.name || "DCEDUPayFee"}
+                        </h1>
+                        <p className="text-[11px] text-slate-500 font-medium tracking-tight truncate">by Digital Communique</p>
                       </div>
-                    ) : (
-                      <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-emerald-200 flex-shrink-0">
-                        <CreditCard size={24} />
-                      </div>
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <h1 className="font-bold text-lg leading-tight truncate" title={orgSettings?.name || "DCEDUPayFee"}>
-                        {orgSettings?.name || "DCEDUPayFee"}
-                      </h1>
-                      <p className="text-xs text-slate-500 font-medium tracking-tight">by Digital Communique</p>
                     </div>
+                    {isMobile && (
+                      <button 
+                        onClick={() => setIsSidebarOpen(false)}
+                        className="p-1.5 text-slate-400 hover:text-slate-600 lg:hidden rounded-lg hover:bg-slate-100"
+                      >
+                        <X size={20} />
+                      </button>
+                    )}
                   </div>
 
-                  <nav className="flex-1 px-4 space-y-1 mt-4">
+                  <nav className="flex-1 px-3 sm:px-4 space-y-1 mt-2 sm:mt-4 overflow-y-auto">
                     {menuItems.map((item) => (
                       <button
                         key={item.id}
@@ -173,33 +196,33 @@ export default function App() {
                           if (isMobile) setIsSidebarOpen(false);
                         }}
                         className={cn(
-                          "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group",
+                          "w-full flex items-center gap-3 px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl transition-all duration-200 group text-sm",
                           activeTab === item.id 
                             ? "bg-emerald-50 text-emerald-700 font-semibold" 
                             : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                         )}
                       >
-                        <item.icon size={20} className={cn(
-                          "transition-colors",
+                        <item.icon size={19} className={cn(
+                          "transition-colors shrink-0",
                           activeTab === item.id ? "text-emerald-600" : "text-slate-400 group-hover:text-slate-600"
                         )} />
-                        <span>{item.label}</span>
+                        <span className="truncate">{item.label}</span>
                         {activeTab === item.id && (
                           <motion.div 
                             layoutId="active-pill"
-                            className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-600"
+                            className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0"
                           />
                         )}
                       </button>
                     ))}
                   </nav>
 
-                  <div className="p-4 border-t border-slate-100">
+                  <div className="p-3 sm:p-4 border-t border-slate-100">
                     <button 
                       onClick={handleLogout}
-                      className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-red-50 hover:text-red-600 transition-colors"
+                      className="w-full flex items-center gap-3 px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl text-slate-600 hover:bg-red-50 hover:text-red-600 transition-colors text-sm"
                     >
-                      <LogOut size={20} />
+                      <LogOut size={19} className="shrink-0" />
                       <span className="font-medium">Sign Out</span>
                     </button>
                   </div>
@@ -208,31 +231,32 @@ export default function App() {
 
               {/* Main Content */}
               <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 sticky top-0 z-40">
-                  <div className="flex items-center gap-4">
+                <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 sticky top-0 z-40">
+                  <div className="flex items-center gap-3">
                     <button 
                       onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                      className="p-2 hover:bg-slate-100 rounded-lg lg:hidden"
+                      className="p-2 text-slate-600 hover:bg-slate-100 rounded-xl lg:hidden focus:outline-none"
+                      aria-label="Toggle Navigation Menu"
                     >
                       {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
                     </button>
-                    <h2 className="text-lg font-bold text-slate-800 capitalize">
+                    <h2 className="text-base sm:text-lg font-bold text-slate-800 capitalize truncate">
                       {menuItems.find(m => m.id === activeTab)?.label}
                     </h2>
                   </div>
                   
-                  <div className="flex items-center gap-4">
-                    <div className="hidden md:block text-right">
-                      <p className="text-sm font-semibold text-slate-900">{user.name}</p>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right hidden sm:block">
+                      <p className="text-xs sm:text-sm font-semibold text-slate-900 truncate max-w-[150px]">{user.name}</p>
                       <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">{user.role}</p>
                     </div>
-                    <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600 font-bold uppercase">
+                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600 font-bold text-xs sm:text-sm uppercase shrink-0">
                       {user.name.substring(0, 2)}
                     </div>
                   </div>
                 </header>
 
-                <div className="flex-1 overflow-y-auto p-6 lg:p-8 flex flex-col justify-between min-h-[calc(100vh-4rem)]">
+                <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 lg:p-8 flex flex-col justify-between min-h-[calc(100vh-4rem)]">
                   <AnimatePresence mode="wait">
                     <motion.div
                       key={location.pathname}
@@ -255,7 +279,7 @@ export default function App() {
                     </motion.div>
                   </AnimatePresence>
 
-                  <footer className="mt-8 pt-4 border-t border-slate-200/60 text-center text-slate-400 text-xs font-semibold tracking-wide uppercase">
+                  <footer className="mt-8 pt-4 border-t border-slate-200/60 text-center text-slate-400 text-[10px] sm:text-xs font-semibold tracking-wide uppercase">
                     Software Developed by Digital Communique Private Limited
                   </footer>
                 </div>

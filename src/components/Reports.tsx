@@ -23,18 +23,23 @@ import {
   LineChart as LineIcon,
   Sparkles,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  History,
+  FileDown,
+  MessageCircle
 } from 'lucide-react';
 import { Transaction } from '../types';
 import { format, subMonths, addMonths } from 'date-fns';
 import { cn } from '../lib/utils';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import autoTable from 'jspdf-autotable';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ResponsiveContainer, 
+  ComposedChart,
   AreaChart, 
   Area, 
   BarChart, 
@@ -203,17 +208,22 @@ export default function Reports() {
 
     // 3. Program/Fee Plan Paid vs Due Bar Chart
     const progMap: Record<string, { paid: number; due: number }> = {};
-    ledger.forEach((st: any) => {
+    (ledger || []).forEach((st: any) => {
+      if (!st) return;
       const prog = cleanVal(st.plan_name) || 'General Program';
       if (!progMap[prog]) progMap[prog] = { paid: 0, due: 0 };
-      progMap[prog].paid += Number(st.total_paid || 0);
-      progMap[prog].due += Math.max(0, Number(st.balance || (st.total_due - st.total_paid) || 0));
+      const paid = Number(st.total_paid) || 0;
+      const dueVal = st.balance !== undefined && st.balance !== null && !isNaN(Number(st.balance))
+        ? Number(st.balance)
+        : ((Number(st.total_due) || 0) - paid);
+      progMap[prog].paid += paid;
+      progMap[prog].due += Math.max(0, isNaN(dueVal) ? 0 : dueVal);
     });
 
     const programBar = Object.keys(progMap).map(p => ({
       program: p.length > 14 ? p.substring(0, 14) + '...' : p,
-      Collected: progMap[p].paid,
-      Pending: progMap[p].due
+      Collected: isNaN(progMap[p].paid) ? 0 : progMap[p].paid,
+      Pending: isNaN(progMap[p].due) ? 0 : progMap[p].due
     }));
 
     return {
@@ -223,10 +233,22 @@ export default function Reports() {
     };
   }, [transactions, ledger]);
 
+  const safeFormatDate = (dateVal: any, pattern: string = 'yyyy-MM-dd HH:mm') => {
+    if (!dateVal) return 'N/A';
+    try {
+      const d = new Date(dateVal);
+      if (isNaN(d.getTime())) return String(dateVal);
+      return format(d, pattern);
+    } catch {
+      return String(dateVal);
+    }
+  };
+
   const formatTxDate = (dateStr: string) => {
     try {
+      if (!dateStr) return 'N/A';
       const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return dateStr;
+      if (isNaN(d.getTime())) return String(dateStr);
       
       const month = d.getMonth() + 1;
       const date = d.getDate();
@@ -242,7 +264,7 @@ export default function Reports() {
       
       return `${month}/${date}/${year} ${hours}:${minutes}:${seconds} ${ampm}`;
     } catch (e) {
-      return dateStr;
+      return String(dateStr || 'N/A');
     }
   };
 
@@ -903,20 +925,26 @@ export default function Reports() {
       .then(data => setSettings(data.settings));
   }, []);
 
-  const deleteTx = async (id: number) => {
-    if (!window.confirm("Are you sure you want to delete this transaction? This action is irreversible.")) {
-      return;
-    }
+  const [deletingTx, setDeletingTx] = useState<Transaction | null>(null);
+
+  const confirmDeleteTx = async () => {
+    if (!deletingTx) return;
     try {
-      const res = await fetch(`/api/transactions/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/transactions/${deletingTx.id}`, { method: 'DELETE' });
       if (res.ok) {
+        setDeletingTx(null);
         refreshData();
       } else {
-        alert("Failed to delete transaction");
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || "Failed to delete transaction");
       }
     } catch (err: any) {
       alert("Error deleting transaction: " + err.message);
     }
+  };
+
+  const deleteTx = (tx: Transaction) => {
+    setDeletingTx(tx);
   };
 
   const startEditTx = (tx: Transaction) => {
@@ -963,13 +991,94 @@ export default function Reports() {
 
   const handlePrint = (tx: Transaction) => {
     setPrintingTx(tx);
-    // Give it a bit more time to render the receipt component
-    setTimeout(() => {
+  };
+
+  const triggerPrintReceipt = () => {
+    const element = document.getElementById('receipt-content');
+    if (!element) {
       window.print();
-      // We don't immediately clear it to ensure print dialog picks it up
-      // but we need to clear it eventually so it doesn't stay in the DOM
-      setTimeout(() => setPrintingTx(null), 1000);
-    }, 500);
+      return;
+    }
+    const printWin = window.open('', '_blank');
+    if (printWin) {
+      printWin.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Payment Receipt - ${printingTx?.id || ''}</title>
+            <script src="https://cdn.tailwindcss.com"></script>
+          </head>
+          <body class="bg-white p-4">
+            ${element.outerHTML}
+            <script>
+              setTimeout(() => {
+                window.print();
+                window.close();
+              }, 600);
+            </script>
+          </body>
+        </html>
+      `);
+      printWin.document.close();
+    } else {
+      window.print();
+    }
+  };
+
+  const downloadReceiptPDF = async () => {
+    const element = document.getElementById('receipt-content');
+    if (!element) return;
+    try {
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+      const imgWidth = 210;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+
+      const pdfName = `Receipt_${printingTx?.id || 'Fee'}.pdf`;
+      const pdfBlob = pdf.output('blob');
+      const blobUrl = URL.createObjectURL(pdfBlob);
+      
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = pdfName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+    } catch (err: any) {
+      console.error("PDF generation failed:", err);
+      alert("Failed to generate PDF: " + (err.message || err));
+    }
+  };
+
+  const shareWhatsAppReceipt = () => {
+    if (!printingTx) return;
+    const orgName = settings?.name || 'MAYA GROUP OF INSTITUTIONS';
+    const txIdNum = Number(printingTx.id) || 0;
+    const receiptNo = `RC-${txIdNum < 100 ? 800 + txIdNum : txIdNum}`;
+    const cleanVal = (val: any) => (val ? val.toString().replace(/^\[Auto\]\s*/, '') : '');
+    
+    const msg = `🚩 *PAYMENT RECEIPT*\n*${orgName.toUpperCase()}*\n\nReceipt No: ${receiptNo}\nDate: ${printingTx.created_at || printingTx.transaction_date || ''}\n\n*Student Details:*\nName: ${cleanVal(printingTx.student_name)}\nRoll No: ${cleanVal(printingTx.roll_no)}\nFather's Name: ${cleanVal(printingTx.guardian_name || 'N/A')}\nBranch: ${cleanVal(printingTx.branch_name || printingTx.branch || 'N/A')}\nSemester: ${cleanVal(printingTx.semester_name || printingTx.course || 'N/A')}\nSession: ${cleanVal(printingTx.academic_term || '2026-27')}\n\n*Payment Details:*\nAmount Paid: ₹${printingTx.amount}\nPayment Mode: ${cleanVal(printingTx.payment_mode)}\nTransaction ID: ${cleanVal(printingTx.transaction_id || 'N/A')}\n\nThank you for your payment!`;
+
+    const encodedMsg = encodeURIComponent(msg);
+    const targetPhone = cleanVal(printingTx.phone || (printingTx as any).student_phone || '');
+    if (targetPhone) {
+      window.open(`https://wa.me/${targetPhone}?text=${encodedMsg}`, '_blank');
+    } else {
+      window.open(`https://wa.me/?text=${encodedMsg}`, '_blank');
+    }
   };
 
   const filteredTransactions = (transactions || []).filter(tx => {
@@ -1208,7 +1317,7 @@ export default function Reports() {
 
                 <div className="h-60 w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={analyticsData.forecastSeries} margin={{ top: 10, right: 15, left: 0, bottom: 0 }}>
+                    <ComposedChart data={analyticsData.forecastSeries} margin={{ top: 10, right: 15, left: 0, bottom: 0 }}>
                       <defs>
                         <linearGradient id="repActualGradient" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor="#10B981" stopOpacity={0.35}/>
@@ -1224,7 +1333,7 @@ export default function Reports() {
                       />
                       <Area type="monotone" dataKey="actual" name="Actual Collection" stroke="#10B981" strokeWidth={3} fillOpacity={1} fill="url(#repActualGradient)" />
                       <Line type="monotone" dataKey="forecast" name="Forecast Projection" stroke="#8B5CF6" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 4, fill: '#8B5CF6' }} />
-                    </AreaChart>
+                    </ComposedChart>
                   </ResponsiveContainer>
                 </div>
               </div>
@@ -1499,7 +1608,7 @@ export default function Reports() {
                             Edit
                           </button>
                           <button 
-                            onClick={() => deleteTx(tx.id)}
+                            onClick={() => deleteTx(tx)}
                             className="bg-[#DC3545] hover:bg-[#C82333] text-white px-2 py-1 rounded text-xs font-bold transition-all flex-1 text-center"
                           >
                             Delete
@@ -1673,7 +1782,7 @@ export default function Reports() {
                                     <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
                                       {txs.map((tx: any, idx: number) => {
                                         const txDateStr = tx.created_at || tx.transaction_date;
-                                        const formattedDate = txDateStr ? format(new Date(txDateStr), 'yyyy-MM-dd HH:mm') : 'N/A';
+                                        const formattedDate = safeFormatDate(txDateStr, 'yyyy-MM-dd HH:mm');
                                         return (
                                           <tr key={tx.id || idx} className="hover:bg-slate-50 transition-colors">
                                             <td className="p-3 font-semibold text-slate-900">{formattedDate}</td>
@@ -1733,12 +1842,114 @@ export default function Reports() {
         </div>
       </div>
 
-      {/* Hidden Receipt for Printing */}
-      {printingTx && (
-        <div className="fixed inset-0 z-[9999] bg-white print:block" style={{ display: 'none' }}>
-          <Receipt transaction={printingTx} settings={settings} />
-        </div>
-      )}
+      {/* Interactive Receipt Modal */}
+      <AnimatePresence>
+        {printingTx && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm overflow-y-auto print:p-0 print:bg-transparent">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl border border-slate-200 shadow-2xl overflow-hidden w-full max-w-4xl max-h-[90vh] flex flex-col print:max-w-none print:max-h-none print:shadow-none print:border-none print:rounded-none"
+            >
+              {/* Modal Header */}
+              <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0 print:hidden">
+                <div className="flex items-center gap-2">
+                  <Printer size={18} className="text-emerald-400" />
+                  <h3 className="font-bold text-base">Payment Receipt - RC-{Number(printingTx.id) < 100 ? 800 + Number(printingTx.id) : printingTx.id}</h3>
+                </div>
+                <button 
+                  onClick={() => setPrintingTx(null)}
+                  className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Receipt Content Container */}
+              <div className="p-6 overflow-y-auto flex-1 bg-slate-50 print:p-0 print:bg-white print:overflow-visible">
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden print:border-none print:shadow-none">
+                  <Receipt transaction={printingTx} settings={settings} />
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="p-4 bg-slate-100 border-t border-slate-200 flex flex-wrap items-center justify-end gap-3 shrink-0 print:hidden">
+                <button 
+                  onClick={triggerPrintReceipt}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-xs hover:bg-blue-700 transition-all shadow-md cursor-pointer"
+                >
+                  <Printer size={16} />
+                  Print Receipt
+                </button>
+                <button 
+                  onClick={downloadReceiptPDF}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-slate-800 text-white rounded-xl font-bold text-xs hover:bg-slate-700 transition-all shadow-md cursor-pointer"
+                >
+                  <FileDown size={16} />
+                  Download PDF
+                </button>
+                <button 
+                  onClick={shareWhatsAppReceipt}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-xs hover:bg-emerald-700 transition-all shadow-md cursor-pointer"
+                >
+                  <MessageCircle size={16} />
+                  WhatsApp
+                </button>
+                <button 
+                  onClick={() => setPrintingTx(null)}
+                  className="px-5 py-2.5 bg-white border border-slate-300 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-50 transition-all cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {deletingTx && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/75 backdrop-blur-sm">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full border border-slate-200 shadow-2xl space-y-5"
+            >
+              <div className="flex items-center gap-3 text-rose-600">
+                <div className="p-3 bg-rose-100 rounded-2xl">
+                  <Trash2 size={24} />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-lg text-slate-900">Delete Transaction</h3>
+                  <p className="text-xs text-slate-500 font-medium">Transaction ID: #{deletingTx.id}</p>
+                </div>
+              </div>
+
+              <p className="text-sm text-slate-600 leading-relaxed">
+                Are you sure you want to permanently delete transaction <strong className="text-slate-900">#{deletingTx.id}</strong> (₹{deletingTx.amount?.toLocaleString()} paid by <strong className="text-slate-900">{deletingTx.student_name || 'Student'}</strong>)?
+              </p>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  onClick={() => setDeletingTx(null)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteTx}
+                  className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition-all shadow-md shadow-rose-600/20 cursor-pointer"
+                >
+                  Yes, Delete Transaction
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Print Styles */}
       <style dangerouslySetInnerHTML={{ __html: `
@@ -1747,18 +1958,24 @@ export default function Reports() {
             size: A4;
             margin: 10mm;
           }
-          #root { visibility: hidden !important; }
-          #receipt-content, #receipt-content * { visibility: visible !important; }
+          body * { 
+            visibility: hidden !important; 
+          }
+          #receipt-content, #receipt-content * { 
+            visibility: visible !important; 
+          }
           #receipt-content { 
-            display: block !important;
-            position: absolute !important;
-            top: 0 !important;
+            position: fixed !important;
             left: 0 !important;
+            top: 0 !important;
             width: 100% !important;
             height: auto !important;
-            background: white !important;
-            padding: 0 !important;
             margin: 0 !important;
+            padding: 20px !important;
+            box-shadow: none !important;
+            border: none !important;
+            background: white !important;
+            z-index: 99999 !important;
           }
         }
       `}} />

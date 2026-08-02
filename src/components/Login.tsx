@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Lock, User, ArrowRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Lock, User, ArrowRight, Download, Smartphone, CheckCircle } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface LoginProps {
@@ -12,6 +12,48 @@ export default function Login({ onLogin, orgSettings }: LoginProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isInstalled, setIsInstalled] = useState(false);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      setIsInstalled(true);
+    }
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallApp = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setIsInstalled(true);
+      }
+      setDeferredPrompt(null);
+    } else {
+      // Direct APK download fallback
+      window.location.href = '/api/download-apk';
+    }
+  };
+
+  const handleDownloadApk = () => {
+    const link = document.createElement('a');
+    link.href = '/api/download-apk';
+    link.download = 'DCfeePay_MayaGroup.apk';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,55 +90,20 @@ export default function Login({ onLogin, orgSettings }: LoginProps) {
     }
   };
 
-  const handleDemoLogin = async () => {
-    setIsLoading(true);
-    setError('');
-    try {
-      const res = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ staffId: 'admin', password: '12345' })
-      });
-      
-      if (res.ok) {
-        const data = await res.json();
-        onLogin(data.staff);
-        return;
-      }
-    } catch (err) {
-      console.warn("Server login failed, using local bypass fallback:", err);
-    }
-    
-    // Fallback authentication
-    onLogin({
-      id: 'demo',
-      staff_id: 'admin',
-      name: 'Demo Administrator',
-      role: 'admin'
-    });
-    setIsLoading(false);
-  };
-
   const orgName = orgSettings?.name || "MAYA GROUP OF INSTITUTIONS";
 
   return (
-    <div className="min-h-screen bg-slate-100/70 flex flex-col items-center justify-between p-4 py-8 font-sans">
+    <div className="min-h-screen bg-slate-100/70 flex flex-col items-center justify-between p-4 py-8 font-sans space-y-6">
       <div />
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-md space-y-5">
         <motion.div 
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-[2rem] shadow-xl shadow-slate-200/60 p-8 md:p-10 border border-slate-200/70"
+          className="bg-white rounded-3xl sm:rounded-[2rem] shadow-xl shadow-slate-200/60 p-6 sm:p-8 md:p-10 border border-slate-200/70"
         >
           {/* Logo Badge */}
-          <div className="w-16 h-16 bg-[#059669] rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-lg shadow-emerald-600/20 overflow-hidden">
-            {orgSettings?.logo ? (
-              <img src={orgSettings.logo} alt="Logo" className="w-full h-full object-contain p-2 bg-white" />
-            ) : (
-              <span className="text-white font-black text-xl tracking-wider">
-                {orgName.substring(0, 2).toUpperCase()}
-              </span>
-            )}
+          <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-lg shadow-emerald-600/10 border border-slate-100 overflow-hidden p-1">
+            <img src="/api/app-icon" alt="Logo" className="w-full h-full object-contain rounded-xl" />
           </div>
 
           {/* Institutional Title & Subtitles */}
@@ -170,10 +177,55 @@ export default function Login({ onLogin, orgSettings }: LoginProps) {
             </div>
           </form>
         </motion.div>
+
+        {/* APK & Mobile Application Download Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-3xl p-5 shadow-xl border border-slate-700/60 flex flex-col gap-4"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-white rounded-xl p-0.5 shrink-0 flex items-center justify-center overflow-hidden border border-emerald-500/30">
+              <img src="/api/app-icon" alt="App Icon" className="w-full h-full object-contain rounded-lg" />
+            </div>
+            <div>
+              <h3 className="font-extrabold text-sm text-white flex items-center gap-1.5">
+                Maya Group Mobile App
+                <span className="px-1.5 py-0.5 rounded bg-emerald-500 text-slate-950 font-black text-[9px] uppercase">
+                  APK / App
+                </span>
+              </h3>
+              <p className="text-[11px] text-slate-300">Download & install directly with official logo icon</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={handleDownloadApk}
+              className="px-3 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-extrabold text-xs transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <Download size={14} />
+              Download APK
+            </button>
+            <button
+              onClick={handleInstallApp}
+              className="px-3 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-extrabold text-xs transition-all border border-slate-600 flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <Smartphone size={14} />
+              {isInstalled ? 'App Ready' : 'Install to Phone'}
+            </button>
+          </div>
+
+          <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-semibold pt-1 border-t border-slate-800">
+            <CheckCircle size={12} className="text-emerald-400 shrink-0" />
+            <span>Saves directly on Android/iOS mobile home screens with official Maya Group icon</span>
+          </div>
+        </motion.div>
       </div>
 
       {/* Software Developer Footer */}
-      <footer className="text-center pt-6">
+      <footer className="text-center pt-4">
         <p className="text-[11px] font-bold text-slate-400 tracking-wide uppercase">
           Software Developed by Digital Communique Private Limited
         </p>

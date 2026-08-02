@@ -14,11 +14,20 @@ export default function Receipt({ transaction, settings }: ReceiptProps) {
   const orgAddress = settings?.address || 'HGJ9+P36, Maharajganj,Gaziapur,Jalalabad,Uttar Prdesh-233002';
   const orgPhone = settings?.phone || '6390777701, 6390777702';
 
-  const txDateFormatted = transaction.created_at 
-    ? format(new Date(transaction.created_at), 'dd-MM-yyyy HH:mm') 
-    : (transaction.transaction_date ? format(new Date(transaction.transaction_date), 'dd-MM-yyyy HH:mm') : format(new Date(), 'dd-MM-yyyy HH:mm'));
+  const txDateFormatted = (() => {
+    const raw = transaction?.created_at || transaction?.transaction_date;
+    if (!raw) return format(new Date(), 'dd-MM-yyyy HH:mm');
+    try {
+      const d = new Date(raw);
+      if (isNaN(d.getTime())) return String(raw);
+      return format(d, 'dd-MM-yyyy HH:mm');
+    } catch {
+      return String(raw);
+    }
+  })();
 
-  const receiptNo = `RC-${transaction.id < 100 ? 800 + transaction.id : transaction.id}`;
+  const txIdNum = Number(transaction?.id) || 0;
+  const receiptNo = `RC-${txIdNum < 100 ? 800 + txIdNum : txIdNum}`;
 
   const studentNameCode = `${cleanVal(transaction.student_name || 'STUDENT').toUpperCase()} / ${cleanVal(transaction.roll_no)}`;
   const guardianName = cleanVal(transaction.guardian_name || 'N/A').toUpperCase();

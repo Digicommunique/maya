@@ -74,7 +74,13 @@ export default function Settings() {
     }).then(() => {
       localStorage.setItem('dc_org_settings', JSON.stringify(data.settings));
       alert('Settings saved successfully!');
-      window.dispatchEvent(new Event('org-settings-updated'));
+      try {
+        window.dispatchEvent(new CustomEvent('org-settings-updated'));
+      } catch (e) {
+        const evt = document.createEvent('Event');
+        evt.initEvent('org-settings-updated', true, true);
+        window.dispatchEvent(evt);
+      }
     });
   };
 
@@ -189,32 +195,32 @@ export default function Settings() {
 
   return (
     <div className="space-y-6">
-      <div className="flex gap-2 p-1 bg-slate-100 rounded-xl w-fit">
+      <div className="flex flex-wrap gap-1.5 sm:gap-2 p-1.5 bg-slate-100/80 rounded-2xl w-full sm:w-fit">
         {tabs.map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveSubTab(tab.id)}
             className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all",
+              "flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex-1 sm:flex-initial justify-center",
               activeSubTab === tab.id 
                 ? "bg-white text-emerald-700 shadow-sm" 
                 : "text-slate-500 hover:text-slate-700"
             )}
           >
-            <tab.icon size={16} />
-            {tab.label}
+            <tab.icon size={16} className="shrink-0" />
+            <span className="truncate">{tab.label}</span>
           </button>
         ))}
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         {activeSubTab === 'organization' && (
-          <form onSubmit={handleOrgSave} className="p-8 space-y-8">
-            <div className="flex flex-col md:flex-row gap-8 items-start">
+          <form onSubmit={handleOrgSave} className="p-4 sm:p-8 space-y-6 sm:space-y-8">
+            <div className="flex flex-col md:flex-row gap-6 sm:gap-8 items-start">
               <div className="space-y-4">
-                <label className="block text-sm font-bold text-slate-700 uppercase tracking-wider">Institution Logo</label>
+                <label className="block text-xs sm:text-sm font-bold text-slate-700 uppercase tracking-wider">Institution Logo</label>
                 <div className="relative group">
-                  <div className="w-32 h-32 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden">
+                  <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden">
                     {data.settings.logo ? (
                       <img src={data.settings.logo} alt="Logo" className="w-full h-full object-contain p-2" />
                     ) : (
@@ -233,14 +239,14 @@ export default function Settings() {
                 </div>
               </div>
 
-              <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 w-full">
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-slate-500 uppercase">Institution Name</label>
                   <input 
                     type="text"
                     value={data.settings.name || ''}
                     onChange={e => setData({...data, settings: {...data.settings, name: e.target.value}})}
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all text-sm"
                     placeholder="e.g. St. Xavier's Academy"
                   />
                 </div>
@@ -252,7 +258,7 @@ export default function Settings() {
                       type="tel"
                       value={data.settings.phone || ''}
                       onChange={e => setData({...data, settings: {...data.settings, phone: e.target.value}})}
-                      className="w-full pl-11 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                      className="w-full pl-11 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all text-sm"
                       placeholder="+91 98765 43210"
                     />
                   </div>
@@ -264,7 +270,7 @@ export default function Settings() {
                     <textarea 
                       value={data.settings.address || ''}
                       onChange={e => setData({...data, settings: {...data.settings, address: e.target.value}})}
-                      className="w-full pl-11 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all min-h-[100px]"
+                      className="w-full pl-11 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all text-sm min-h-[100px]"
                       placeholder="Enter full campus address..."
                     />
                   </div>
@@ -274,7 +280,7 @@ export default function Settings() {
             <div className="flex justify-end pt-4 border-t border-slate-100">
               <button 
                 type="submit"
-                className="bg-emerald-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 flex items-center gap-2"
+                className="bg-emerald-600 text-white px-6 sm:px-8 py-3 rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 flex items-center justify-center gap-2 w-full sm:w-auto text-sm"
               >
                 <Save size={18} />
                 Save Organization Profile
@@ -284,7 +290,7 @@ export default function Settings() {
         )}
 
         {activeSubTab === 'academic' && (
-          <div className="p-8 grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="p-4 sm:p-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
             {/* Semesters */}
             <div className="space-y-4">
               <h4 className="font-bold text-slate-800 flex items-center gap-2">
@@ -396,11 +402,11 @@ export default function Settings() {
         )}
 
         {activeSubTab === 'staff' && (
-          <div className="p-8 space-y-8">
-            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
+          <div className="p-4 sm:p-8 space-y-6 sm:space-y-8">
+            <div className="bg-slate-50 p-4 sm:p-6 rounded-2xl border border-slate-200 space-y-4">
               <div className="flex items-center justify-between">
-                <h4 className="font-bold text-slate-800 flex items-center gap-2">
-                  <UserPlus size={18} className="text-emerald-600" />
+                <h4 className="font-bold text-slate-800 flex items-center gap-2 text-sm sm:text-base">
+                  <UserPlus size={18} className="text-emerald-600 shrink-0" />
                   {editingStaffId ? 'Edit Staff Member' : 'Add New Staff Member'}
                 </h4>
                 {editingStaffId && (
@@ -413,7 +419,7 @@ export default function Settings() {
                   </button>
                 )}
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 sm:gap-4">
                 <input 
                   type="text"
                   value={newItems.staff.staff_id}

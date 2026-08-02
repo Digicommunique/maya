@@ -21,7 +21,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Student, Transaction, OrgSettings } from '../types';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
-import { jsPDF } from 'jspdf';
+import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
 import Receipt from './Receipt';
@@ -160,7 +160,35 @@ export default function FeeCollection() {
   };
 
   const handlePrint = () => {
-    window.print();
+    const element = document.getElementById('receipt-content');
+    if (!element) {
+      window.print();
+      return;
+    }
+    const printWin = window.open('', '_blank');
+    if (printWin) {
+      printWin.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Payment Receipt - ${lastTx?.id || ''}</title>
+            <script src="https://cdn.tailwindcss.com"></script>
+          </head>
+          <body class="bg-white p-4">
+            ${element.outerHTML}
+            <script>
+              setTimeout(() => {
+                window.print();
+                window.close();
+              }, 600);
+            </script>
+          </body>
+        </html>
+      `);
+      printWin.document.close();
+    } else {
+      window.print();
+    }
   };
 
   const downloadPDF = async () => {
@@ -171,6 +199,7 @@ export default function FeeCollection() {
       const canvas = await html2canvas(element, {
         scale: 2,
         useCORS: true,
+        allowTaint: true,
         logging: false,
         backgroundColor: '#ffffff'
       });
@@ -187,10 +216,21 @@ export default function FeeCollection() {
       const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
 
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`Receipt_${lastTx?.id || 'Fee'}.pdf`);
-    } catch (err) {
+
+      const pdfName = `Receipt_${lastTx?.id || 'Fee'}.pdf`;
+      const pdfBlob = pdf.output('blob');
+      const blobUrl = URL.createObjectURL(pdfBlob);
+      
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = pdfName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+    } catch (err: any) {
       console.error('PDF generation failed:', err);
-      alert('Failed to generate PDF. Please try printing instead.');
+      alert('Failed to generate PDF: ' + (err.message || err));
     }
   };
 
@@ -325,36 +365,36 @@ export default function FeeCollection() {
     <div className="max-w-4xl mx-auto space-y-8">
       {!isSuccess ? (
         <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden">
-          <div className="p-8 bg-slate-900 text-white">
-            <h3 className="text-2xl font-bold">Record Payment</h3>
-            <p className="text-slate-400 text-sm mt-1">Search student and record payment details</p>
+          <div className="p-5 sm:p-8 bg-slate-900 text-white">
+            <h3 className="text-xl sm:text-2xl font-bold">Record Payment</h3>
+            <p className="text-slate-400 text-xs sm:text-sm mt-1">Search student and record payment details</p>
           </div>
 
-          <div className="p-8 space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="md:col-span-1 space-y-2">
+          <div className="p-4 sm:p-8 space-y-6 sm:space-y-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
+              <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Filter by Branch</label>
                 <select 
                   value={filterBranch}
                   onChange={e => setFilterBranch(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all bg-white text-sm"
+                  className="w-full px-3.5 py-2.5 sm:py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all bg-white text-sm"
                 >
                   <option value="">All Branches</option>
                   {branches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
                 </select>
               </div>
-              <div className="md:col-span-1 space-y-2">
+              <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Filter by Course</label>
                 <select 
                   value={filterCourse}
                   onChange={e => setFilterCourse(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all bg-white text-sm"
+                  className="w-full px-3.5 py-2.5 sm:py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all bg-white text-sm"
                 >
                   <option value="">All Courses</option>
                   {semesters.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                 </select>
               </div>
-              <div className="md:col-span-1 space-y-2">
+              <div className="sm:col-span-2 md:col-span-1 space-y-1.5">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Search Student</label>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />

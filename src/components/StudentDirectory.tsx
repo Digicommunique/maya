@@ -16,15 +16,19 @@ import {
   Upload,
   MessageCircle,
   Share2,
-  History
+  History,
+  Printer,
+  FileDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Student, FeePlan, Branch, Semester, Session } from '../types';
+import { Student, FeePlan, Branch, Semester, Session, OrgSettings } from '../types';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import autoTable from 'jspdf-autotable';
+import Receipt from './Receipt';
 
 export default function StudentDirectory() {
   const [students, setStudents] = useState<Student[]>([]);
@@ -54,8 +58,96 @@ export default function StudentDirectory() {
   } | null>(null);
 
   const [studentTxs, setStudentTxs] = useState<any[]>([]);
+  const [orgSettings, setOrgSettings] = useState<OrgSettings | null>(null);
+  const [printingTx, setPrintingTx] = useState<any | null>(null);
 
+  const triggerPrintReceipt = () => {
+    const element = document.getElementById('receipt-content');
+    if (!element) {
+      window.print();
+      return;
+    }
+    const printWin = window.open('', '_blank');
+    if (printWin) {
+      printWin.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Payment Receipt - ${printingTx?.id || ''}</title>
+            <script src="https://cdn.tailwindcss.com"></script>
+          </head>
+          <body class="bg-white p-4">
+            ${element.outerHTML}
+            <script>
+              setTimeout(() => {
+                window.print();
+                window.close();
+              }, 600);
+            </script>
+          </body>
+        </html>
+      `);
+      printWin.document.close();
+    } else {
+      window.print();
+    }
+  };
 
+  const downloadReceiptPDF = async () => {
+    const element = document.getElementById('receipt-content');
+    if (!element) return;
+    try {
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+      const imgWidth = 210;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+
+      const pdfName = `Receipt_${printingTx?.id || 'Fee'}.pdf`;
+      const pdfBlob = pdf.output('blob');
+      const blobUrl = URL.createObjectURL(pdfBlob);
+      
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = pdfName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+    } catch (err: any) {
+      console.error("PDF generation failed:", err);
+      alert("Failed to generate PDF: " + (err.message || err));
+    }
+  };
+
+  const shareWhatsAppReceipt = () => {
+    if (!printingTx) return;
+    const orgName = orgSettings?.name || 'MAYA GROUP OF INSTITUTIONS';
+    const txIdNum = Number(printingTx.id) || 0;
+    const receiptNo = `RC-${txIdNum < 100 ? 800 + txIdNum : txIdNum}`;
+    const cleanVal = (val: any) => (val ? val.toString().replace(/^\[Auto\]\s*/, '') : '');
+    
+    const msg = `🚩 *PAYMENT RECEIPT*\n*${orgName.toUpperCase()}*\n\nReceipt No: ${receiptNo}\nDate: ${printingTx.created_at || printingTx.transaction_date || ''}\n\n*Student Details:*\nName: ${cleanVal(printingTx.student_name)}\nRoll No: ${cleanVal(printingTx.roll_no)}\nFather's Name: ${cleanVal(printingTx.guardian_name || 'N/A')}\nBranch: ${cleanVal(printingTx.branch_name || printingTx.branch || 'N/A')}\nSemester: ${cleanVal(printingTx.semester_name || printingTx.course || 'N/A')}\nSession: ${cleanVal(printingTx.academic_term || '2026-27')}\n\n*Payment Details:*\nAmount Paid: ₹${printingTx.amount}\nPayment Mode: ${cleanVal(printingTx.payment_mode)}\nTransaction ID: ${cleanVal(printingTx.transaction_id || 'N/A')}\n\nThank you for your payment!`;
+
+    const encodedMsg = encodeURIComponent(msg);
+    const targetPhone = cleanVal(printingTx.phone || (printingTx as any).student_phone || '');
+    if (targetPhone) {
+      window.open(`https://wa.me/${targetPhone}?text=${encodedMsg}`, '_blank');
+    } else {
+      window.open(`https://wa.me/?text=${encodedMsg}`, '_blank');
+    }
+  };
 
   const [newStudent, setNewStudent] = useState({
     name: '',
@@ -79,6 +171,7 @@ export default function StudentDirectory() {
       setBranches(settingsData?.branches || []);
       setSemesters(settingsData?.semesters || []);
       setSessions(settingsData?.sessions || []);
+      setOrgSettings(settingsData?.settings || settingsData || null);
     }).catch(err => {
       console.error("fetchData error:", err);
       setStudents([]);
@@ -138,6 +231,17 @@ export default function StudentDirectory() {
         alert(editingStudent ? 'Update failed' : (errData.message || 'Roll Number already exists'));
       }
     });
+  };
+
+  const safeFormatDate = (dateVal: any, pattern: string = 'yyyy-MM-dd HH:mm') => {
+    if (!dateVal) return 'N/A';
+    try {
+      const d = new Date(dateVal);
+      if (isNaN(d.getTime())) return String(dateVal);
+      return format(d, pattern);
+    } catch {
+      return String(dateVal);
+    }
   };
 
   const startEdit = (student: Student) => {
@@ -479,7 +583,13 @@ export default function StudentDirectory() {
         // Trigger parent update
         fetchData();
         // Also fire event to let App.tsx know settings might have been updated
-        window.dispatchEvent(new Event('org-settings-updated'));
+        try {
+          window.dispatchEvent(new CustomEvent('org-settings-updated'));
+        } catch (e) {
+          const evt = document.createEvent('Event');
+          evt.initEvent('org-settings-updated', true, true);
+          window.dispatchEvent(evt);
+        }
 
       } catch (err: any) {
         alert(`Failed to read the file (CSV/Excel): ${err.message || err}`);
@@ -544,11 +654,10 @@ export default function StudentDirectory() {
           <h3 className="text-2xl font-bold text-slate-800">Student Directory</h3>
           <p className="text-slate-500 text-sm">Manage enrollment and student profiles</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-
-          <label className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all cursor-pointer">
-            <Upload size={18} className="text-blue-600" />
-            Import (CSV/Excel)
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full md:w-auto">
+          <label className="flex items-center justify-center gap-2 px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all cursor-pointer flex-1 sm:flex-initial">
+            <Upload size={17} className="text-blue-600 shrink-0" />
+            <span className="truncate">Import (CSV/Excel)</span>
             <input 
               type="file" 
               accept=".csv, .xlsx, .xls, .txt, text/csv, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" 
@@ -558,67 +667,69 @@ export default function StudentDirectory() {
           </label>
           <button 
             onClick={exportExcel}
-            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all"
+            className="flex items-center justify-center gap-2 px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all flex-1 sm:flex-initial"
           >
-            <FileSpreadsheet size={18} className="text-emerald-600" />
-            Export Excel
+            <FileSpreadsheet size={17} className="text-emerald-600 shrink-0" />
+            <span className="truncate">Export Excel</span>
           </button>
           <button 
             onClick={exportPDF}
-            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all"
+            className="flex items-center justify-center gap-2 px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all flex-1 sm:flex-initial"
           >
-            <FileText size={18} className="text-violet-600" />
-            PDF Report
+            <FileText size={17} className="text-violet-600 shrink-0" />
+            <span className="truncate">PDF Report</span>
           </button>
           <button 
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100"
+            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-xs sm:text-sm font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 w-full sm:w-auto"
           >
-            <UserPlus size={18} />
-            Enroll New
+            <UserPlus size={17} className="shrink-0" />
+            <span>Enroll New</span>
           </button>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center gap-4">
-        <div className="relative flex-1 min-w-[240px]">
+      <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center flex-wrap gap-3 sm:gap-4">
+        <div className="relative flex-1 min-w-[200px] w-full sm:w-auto">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input 
             type="text"
             placeholder="Search by name, roll no or phone..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-slate-100 bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all text-sm"
+            className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-slate-100 bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all text-xs sm:text-sm"
           />
         </div>
         
-        <select 
-          value={filters.plan}
-          onChange={e => setFilters({...filters, plan: e.target.value})}
-          className="px-4 py-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-emerald-500 bg-white min-w-[140px]"
-        >
-          <option value="all">All Programs</option>
-          {(plans || []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 w-full sm:w-auto sm:flex sm:items-center">
+          <select 
+            value={filters.plan}
+            onChange={e => setFilters({...filters, plan: e.target.value})}
+            className="px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-emerald-500 bg-white w-full sm:w-auto min-w-[120px]"
+          >
+            <option value="all">All Programs</option>
+            {(plans || []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
 
-        <select 
-          value={filters.branch}
-          onChange={e => setFilters({...filters, branch: e.target.value})}
-          className="px-4 py-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-emerald-500 bg-white min-w-[140px]"
-        >
-          <option value="all">All Branches</option>
-          {(branches || []).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-        </select>
+          <select 
+            value={filters.branch}
+            onChange={e => setFilters({...filters, branch: e.target.value})}
+            className="px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-emerald-500 bg-white w-full sm:w-auto min-w-[120px]"
+          >
+            <option value="all">All Branches</option>
+            {(branches || []).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
 
-        <select 
-          value={filters.semester}
-          onChange={e => setFilters({...filters, semester: e.target.value})}
-          className="px-4 py-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-emerald-500 bg-white min-w-[140px]"
-        >
-          <option value="all">All Semesters</option>
-          {(semesters || []).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
+          <select 
+            value={filters.semester}
+            onChange={e => setFilters({...filters, semester: e.target.value})}
+            className="px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-emerald-500 bg-white w-full sm:w-auto min-w-[120px]"
+          >
+            <option value="all">All Semesters</option>
+            {(semesters || []).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </div>
       </div>
 
       {/* Table */}
@@ -1141,12 +1252,13 @@ export default function StudentDirectory() {
                             <th className="p-3 text-right">Running Total</th>
                             <th className="p-3 text-right">Balance Due</th>
                             <th className="p-3 text-center">Status</th>
+                            <th className="p-3 text-center">Receipt</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
                           {studentTxs.map((tx: any, idx: number) => {
                             const txDateStr = tx.created_at || tx.transaction_date;
-                            const formattedDate = txDateStr ? format(new Date(txDateStr), 'yyyy-MM-dd HH:mm') : 'N/A';
+                            const formattedDate = safeFormatDate(txDateStr, 'yyyy-MM-dd HH:mm');
                             return (
                               <tr key={tx.id || idx} className="hover:bg-slate-50/80 transition-colors">
                                 <td className="p-3 font-bold text-slate-900">{formattedDate}</td>
@@ -1166,6 +1278,28 @@ export default function StudentDirectory() {
                                       Verified
                                     </span>
                                   )}
+                                </td>
+                                <td className="p-3 text-center">
+                                  <button
+                                    onClick={() => {
+                                      const normalizedTx = {
+                                        ...tx,
+                                        student_name: tx.student_name || viewingStudent?.name,
+                                        roll_no: tx.roll_no || viewingStudent?.roll_no,
+                                        guardian_name: tx.guardian_name || viewingStudent?.guardian_name,
+                                        phone: tx.phone || viewingStudent?.phone,
+                                        branch_name: tx.branch_name || viewingStudent?.branch_name || branches.find(b => b.id === viewingStudent?.branch_id)?.name,
+                                        semester_name: tx.semester_name || viewingStudent?.semester_name || semesters.find(s => s.id === viewingStudent?.semester_id)?.name,
+                                        session_name: tx.session_name || viewingStudent?.session_name || sessions.find(s => s.id === viewingStudent?.session_id)?.name,
+                                        academic_term: tx.academic_term || viewingStudent?.session_name || '2026-27'
+                                      };
+                                      setPrintingTx(normalizedTx);
+                                    }}
+                                    className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold transition-all border border-slate-200 inline-flex items-center gap-1"
+                                  >
+                                    <Printer size={10} />
+                                    Receipt
+                                  </button>
                                 </td>
                               </tr>
                             );
@@ -1209,6 +1343,100 @@ export default function StudentDirectory() {
           </div>
         )}
       </AnimatePresence>
+      {/* Interactive Receipt Modal */}
+      <AnimatePresence>
+        {printingTx && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm overflow-y-auto print:p-0 print:bg-transparent">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl border border-slate-200 shadow-2xl overflow-hidden w-full max-w-4xl max-h-[90vh] flex flex-col print:max-w-none print:max-h-none print:shadow-none print:border-none print:rounded-none"
+            >
+              {/* Modal Header */}
+              <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0 print:hidden">
+                <div className="flex items-center gap-2">
+                  <Printer size={18} className="text-emerald-400" />
+                  <h3 className="font-bold text-base">Payment Receipt - RC-{Number(printingTx.id) < 100 ? 800 + Number(printingTx.id) : printingTx.id}</h3>
+                </div>
+                <button 
+                  onClick={() => setPrintingTx(null)}
+                  className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Receipt Content Container */}
+              <div className="p-6 overflow-y-auto flex-1 bg-slate-50 print:p-0 print:bg-white print:overflow-visible">
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden print:border-none print:shadow-none">
+                  <Receipt transaction={printingTx} settings={orgSettings} />
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="p-4 bg-slate-100 border-t border-slate-200 flex flex-wrap items-center justify-end gap-3 shrink-0 print:hidden">
+                <button 
+                  onClick={triggerPrintReceipt}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-xs hover:bg-blue-700 transition-all shadow-md"
+                >
+                  <Printer size={16} />
+                  Print Receipt
+                </button>
+                <button 
+                  onClick={downloadReceiptPDF}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-slate-800 text-white rounded-xl font-bold text-xs hover:bg-slate-700 transition-all shadow-md"
+                >
+                  <FileDown size={16} />
+                  Download PDF
+                </button>
+                <button 
+                  onClick={shareWhatsAppReceipt}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-xs hover:bg-emerald-700 transition-all shadow-md"
+                >
+                  <MessageCircle size={16} />
+                  WhatsApp
+                </button>
+                <button 
+                  onClick={() => setPrintingTx(null)}
+                  className="px-5 py-2.5 bg-white border border-slate-300 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-50 transition-all"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Print Styles */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media print {
+          @page { 
+            size: A4;
+            margin: 10mm;
+          }
+          body * { 
+            visibility: hidden !important; 
+          }
+          #receipt-content, #receipt-content * { 
+            visibility: visible !important; 
+          }
+          #receipt-content { 
+            position: fixed !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            height: auto !important;
+            margin: 0 !important;
+            padding: 20px !important;
+            box-shadow: none !important;
+            border: none !important;
+            background: white !important;
+            z-index: 99999 !important;
+          }
+        }
+      `}} />
     </div>
   );
 }

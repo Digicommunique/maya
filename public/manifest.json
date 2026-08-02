@@ -1,0 +1,24 @@
+{
+  "short_name": "DCfeePay",
+  "name": "Maya Group of Institutions - DCfeePay Fee Portal",
+  "icons": [
+    {
+      "src": "/api/app-icon?size=192",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/api/app-icon?size=512",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#059669",
+  "theme_color": "#059669",
+  "display": "standalone",
+  "orientation": "portrait",
+  "categories": ["education", "finance"]
+}

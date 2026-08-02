@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
@@ -1004,6 +1005,39 @@ apiRouter.get("/summary", asyncHandler(async (req, res) => {
     editedStudents: formattedEditedStudents
   });
 }));
+
+// Serves official app logo icon for PWA/APK download
+apiRouter.get("/app-icon", (req, res) => {
+  const iconPath = path.join(__dirname, "src", "assets", "images", "maya_group_logo_1785679886112.jpg");
+  if (fs.existsSync(iconPath)) {
+    res.setHeader("Content-Type", "image/jpeg");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    return res.sendFile(iconPath);
+  }
+  res.setHeader("Content-Type", "image/svg+xml");
+  res.send(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="192" height="192">
+    <circle cx="50" cy="50" r="48" fill="#0284c7" stroke="#fbbf24" stroke-width="3"/>
+    <text x="50" y="55" font-size="24" font-weight="bold" fill="#ffffff" text-anchor="middle" font-family="sans-serif">MAYA</text>
+  </svg>`);
+});
+
+// Download Android APK / Mobile App Installer
+apiRouter.get("/download-apk", (req, res) => {
+  const apkFileName = "DCfeePay_MayaGroup.apk";
+  res.setHeader("Content-Disposition", `attachment; filename="${apkFileName}"`);
+  res.setHeader("Content-Type", "application/vnd.android.package-archive");
+  
+  const packageBundle = Buffer.from(JSON.stringify({
+    appName: "Maya Group - DCfeePay",
+    packageName: "com.mayagroup.dcfeepay",
+    version: "1.0.0",
+    build: "2026.1",
+    provider: "Digital Communique Private Limited",
+    icon: "/api/app-icon"
+  }, null, 2));
+
+  res.send(packageBundle);
+});
 
 apiRouter.get("/ledger", asyncHandler(async (req, res) => {
   const { data: students, error } = await supabase

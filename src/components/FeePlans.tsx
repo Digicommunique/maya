@@ -104,16 +104,16 @@ export default function FeePlans() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h3 className="text-2xl font-bold text-slate-800">Fee Structures</h3>
           <p className="text-slate-500 text-sm">Standardize billing across all programs</p>
         </div>
         <button 
           onClick={() => setIsModalOpen(true)}
-          className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100"
+          className="bg-emerald-600 text-white px-5 py-2.5 sm:px-6 sm:py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 w-full sm:w-auto text-sm"
         >
-          <Plus size={20} />
+          <Plus size={18} />
           Create New Plan
         </button>
       </div>
@@ -210,7 +210,7 @@ export default function FeePlans() {
                 </button>
               </div>
 
-              <div className="p-8 space-y-8 max-h-[70vh] overflow-y-auto">
+              <div className="p-4 sm:p-8 space-y-6 max-h-[80vh] overflow-y-auto">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Plan Name</label>

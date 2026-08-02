@@ -22,6 +22,7 @@ import { format, subMonths, addMonths } from 'date-fns';
 import { cn } from '../lib/utils';
 import { 
   ResponsiveContainer, 
+  ComposedChart,
   AreaChart, 
   Area, 
   BarChart, 
@@ -39,6 +40,17 @@ import {
 } from 'recharts';
 
 export default function Dashboard({ setActiveTab, user }: { setActiveTab: (tab: string) => void, user: any }) {
+  const safeFormatDate = (dateVal: any, pattern: string = 'MMM dd, yyyy • hh:mm a') => {
+    if (!dateVal) return 'N/A';
+    try {
+      const d = new Date(dateVal);
+      if (isNaN(d.getTime())) return String(dateVal);
+      return format(d, pattern);
+    } catch {
+      return String(dateVal);
+    }
+  };
+
   const [summary, setSummary] = useState<any>(null);
   const [allTxs, setAllTxs] = useState<any[]>([]);
   const [allLedger, setAllLedger] = useState<any[]>([]);
@@ -282,7 +294,7 @@ export default function Dashboard({ setActiveTab, user }: { setActiveTab: (tab: 
 
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={forecastData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+              <ComposedChart data={forecastData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="actualGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#10B981" stopOpacity={0.4}/>
@@ -302,7 +314,7 @@ export default function Dashboard({ setActiveTab, user }: { setActiveTab: (tab: 
                 />
                 <Area type="monotone" dataKey="actual" name="Actual Collection" stroke="#10B981" strokeWidth={3} fillOpacity={1} fill="url(#actualGradient)" />
                 <Line type="monotone" dataKey="forecast" name="Forecasted Projection" stroke="#8B5CF6" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 4, fill: '#8B5CF6' }} />
-              </AreaChart>
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
         </div>
@@ -398,7 +410,7 @@ export default function Dashboard({ setActiveTab, user }: { setActiveTab: (tab: 
                       )}
                     </div>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      {tx.created_at ? format(new Date(tx.created_at), 'MMM dd, yyyy • hh:mm a') : 'N/A'}
+                      {safeFormatDate(tx.created_at || tx.transaction_date, 'MMM dd, yyyy • hh:mm a')}
                     </p>
                   </div>
                 </div>
