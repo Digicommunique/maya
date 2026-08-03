@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Search, 
   Filter, 
@@ -167,7 +167,17 @@ export default function StudentDirectory() {
       safeFetchJson('/api/fee-plans', undefined, []),
       safeFetchJson('/api/settings', undefined, null)
     ]).then(([studentsData, plansData, settingsData]) => {
-      setStudents(Array.isArray(studentsData) ? studentsData : []);
+      const rawStudents = Array.isArray(studentsData) ? studentsData : [];
+      // Sort students so latest added student appears at the top
+      rawStudents.sort((a: any, b: any) => {
+        const idA = Number(a.id) || 0;
+        const idB = Number(b.id) || 0;
+        if (idA !== idB) return idB - idA;
+        const timeA = new Date(a.created_at || 0).getTime();
+        const timeB = new Date(b.created_at || 0).getTime();
+        return timeB - timeA;
+      });
+      setStudents(rawStudents);
       setPlans(Array.isArray(plansData) ? plansData : []);
       setBranches(settingsData?.branches || []);
       setSemesters(settingsData?.semesters || []);
@@ -304,18 +314,21 @@ export default function StudentDirectory() {
     }
   };
 
-  const filteredStudents = (students || []).filter(s => {
-    const matchesSearch = 
-      (s.name || '').toLowerCase().includes(search.toLowerCase()) || 
-      (s.roll_no || '').toLowerCase().includes(search.toLowerCase()) ||
-      (s.phone || '').includes(search);
-    
-    const matchesPlan = filters.plan === 'all' || Number(s.plan_id) === Number(filters.plan);
-    const matchesBranch = filters.branch === 'all' || Number(s.branch_id) === Number(filters.branch);
-    const matchesSemester = filters.semester === 'all' || Number(s.semester_id) === Number(filters.semester);
+  const filteredStudents = useMemo(() => {
+    const searchLower = search.toLowerCase().trim();
+    return (students || []).filter(s => {
+      const matchesSearch = !searchLower || 
+        (s.name || '').toLowerCase().includes(searchLower) || 
+        (s.roll_no || '').toLowerCase().includes(searchLower) ||
+        (s.phone || '').includes(searchLower);
+      
+      const matchesPlan = filters.plan === 'all' || Number(s.plan_id) === Number(filters.plan);
+      const matchesBranch = filters.branch === 'all' || Number(s.branch_id) === Number(filters.branch);
+      const matchesSemester = filters.semester === 'all' || Number(s.semester_id) === Number(filters.semester);
 
-    return matchesSearch && matchesPlan && matchesBranch && matchesSemester;
-  });
+      return matchesSearch && matchesPlan && matchesBranch && matchesSemester;
+    });
+  }, [students, search, filters]);
 
   const exportExcel = () => {
     const data = filteredStudents.map(s => ({

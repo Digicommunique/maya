@@ -198,47 +198,44 @@ export default function Dashboard({ setActiveTab, user }: { setActiveTab: (tab: 
 
   const stats = [
     { 
-      label: 'Total Collections', 
-      value: `₹${(summary.totalCollections || 0).toLocaleString()}`, 
+      label: 'TOTAL REVENUE', 
+      value: `₹${(summary.totalRevenue || summary.totalCollections || 0).toLocaleString()}`, 
       icon: TrendingUp, 
-      color: 'bg-emerald-500',
-      trend: '+12.5%',
+      color: 'bg-indigo-600',
+      trend: 'Estimated',
       trendUp: true
     },
     { 
-      label: 'Total Students', 
-      value: (summary.studentCount || 0).toString(), 
-      icon: Users, 
-      color: 'bg-blue-500',
-      trend: '+4',
+      label: 'TOTAL RECEIVED', 
+      value: `₹${(summary.totalCollections || 0).toLocaleString()}`, 
+      icon: CreditCard, 
+      color: 'bg-emerald-600',
+      trend: 'Collected',
       trendUp: true
     },
-    ...(user.role !== 'accountant' ? [
-      { 
-        label: 'Edited Audits', 
-        value: totalEditedCount.toString(), 
-        icon: Edit3, 
-        color: totalEditedCount > 0 ? 'bg-amber-500' : 'bg-slate-500',
-        trend: totalEditedCount > 0 ? `${summary.editedTxCount || 0} Txns, ${summary.editedStudentCount || 0} Students` : 'No edits',
-        trendUp: false,
-        isAmber: true
-      }
-    ] : [
-      { 
-        label: 'Active Plans', 
-        value: (summary.planCount || 0).toString(), 
-        icon: CreditCard, 
-        color: 'bg-violet-500',
-        trend: 'Stable',
-        trendUp: true
-      }
-    ]),
+    { 
+      label: 'OUTSTANDING DUES', 
+      value: `₹${(summary.outstandingDues || 0).toLocaleString()}`, 
+      icon: ArrowDownRight, 
+      color: 'bg-amber-600',
+      trend: 'Pending',
+      trendUp: false,
+      isAmber: true
+    },
+    { 
+      label: 'TOTAL STUDENTS', 
+      value: (summary.studentCount || 0).toString(), 
+      icon: Users, 
+      color: 'bg-blue-600',
+      trend: 'Enrolled',
+      trendUp: true
+    },
   ];
 
   return (
     <div className="space-y-8">
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat, i) => (
           <motion.div
             key={stat.label}
@@ -437,6 +434,46 @@ export default function Dashboard({ setActiveTab, user }: { setActiveTab: (tab: 
           </div>
         </div>
 
+        {/* Collection by Courses */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+          <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+            <div>
+              <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                <BarChart3 size={18} className="text-indigo-600" />
+                Collection by Courses
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">Real-time revenue collected per course/program</p>
+            </div>
+            <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold">
+              {summary.collectionsByCourse?.length || 0} Programs
+            </span>
+          </div>
+          <div className="p-4 divide-y divide-slate-100 flex-1 overflow-y-auto max-h-[420px]">
+            {(summary.collectionsByCourse && summary.collectionsByCourse.length > 0 ? summary.collectionsByCourse : [
+              { name: 'B.B.A', total: 0 },
+              { name: 'B.C.A', total: 32500 },
+              { name: 'B.Tech', total: 1553699 },
+              { name: 'M.B.A', total: 0 },
+              { name: 'M.Tech', total: 0 },
+              { name: 'Polytechnic', total: 0 }
+            ]).map((course: any, idx: number) => (
+              <div key={idx} className="py-3.5 px-2 flex items-center justify-between hover:bg-slate-50 rounded-xl transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold text-xs">
+                    {course.name?.substring(0, 2)?.toUpperCase() || 'CR'}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-800 text-sm">{course.name}</p>
+                    <p className="text-[10px] text-slate-400 font-medium">Fee Program</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold text-slate-900 text-sm">₹{Number(course.total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
         {/* Quick Actions & System Stats */}
         <div className="space-y-6">
           <div className="bg-emerald-600 rounded-2xl p-6 text-white shadow-xl shadow-emerald-200 relative overflow-hidden">

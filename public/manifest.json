@@ -1,16 +1,17 @@
 {
   "short_name": "DCfeePay",
   "name": "Maya Group of Institutions - DCfeePay Fee Portal",
+  "description": "DCfeePay Mobile Fee Portal for Maya Group of Institutions Ghazipur",
   "icons": [
     {
-      "src": "/api/app-icon?size=192",
-      "type": "image/png",
+      "src": "/api/app-icon",
+      "type": "image/jpeg",
       "sizes": "192x192",
       "purpose": "any maskable"
     },
     {
-      "src": "/api/app-icon?size=512",
-      "type": "image/png",
+      "src": "/api/app-icon",
+      "type": "image/jpeg",
       "sizes": "512x512",
       "purpose": "any maskable"
     }

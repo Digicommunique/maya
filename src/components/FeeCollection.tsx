@@ -253,7 +253,7 @@ export default function FeeCollection() {
       let hours = d.getHours();
       const minutes = d.getMinutes().toString().padStart(2, '0');
       const seconds = d.getSeconds().toString().padStart(2, '0');
-      const ampm = hours >= 12 ? 'AM' : 'PM';
+      const ampm = hours >= 12 ? 'PM' : 'AM';
       hours = hours % 12;
       hours = hours ? hours : 12;
       return `${month}/${date}/${year} ${hours}:${minutes}:${seconds} ${ampm}`;

@@ -689,7 +689,8 @@ apiRouter.get("/students", asyncHandler(async (req, res) => {
       semester:semesters(name),
       session:sessions(name),
       transactions(amount)
-    `);
+    `)
+    .order("id", { ascending: false });
     
   if (error) return res.status(500).json({ error: error.message });
   
@@ -701,14 +702,14 @@ apiRouter.get("/students", asyncHandler(async (req, res) => {
     branch_name: s.branch?.name,
     semester_name: s.semester?.name,
     session_name: s.session?.name,
-    total_paid: s.transactions?.reduce((sum: number, t: any) => sum + Number(t.amount), 0) || 0
+    total_paid: s.transactions?.reduce((sum: number, t: any) => sum + Number(t.amount || 0), 0) || 0
   }));
   
   res.json(formatted);
 }));
 
 apiRouter.post("/students", asyncHandler(async (req, res) => {
-  const { name, guardian_name, roll_no, phone, plan_id, branch_id, semester_id, session_id, merge_duplicate } = req.body;
+  const { name, guardian_name, roll_no, phone, plan_id, branch_id, semester_id, session_id, merge_duplicate, created_at } = req.body;
   
   if (roll_no) {
     const { data: existing } = await supabase.from("students").select("id, name").eq("roll_no", roll_no).maybeSingle();
@@ -729,9 +730,14 @@ apiRouter.post("/students", asyncHandler(async (req, res) => {
     }
   }
 
-  const { data, error } = await supabase.from("students").insert({
+  const insertPayload: any = {
     name, guardian_name, roll_no, phone, plan_id, branch_id, semester_id, session_id
-  }).select().single();
+  };
+  if (created_at) {
+    insertPayload.created_at = created_at;
+  }
+
+  const { data, error } = await supabase.from("students").insert(insertPayload).select().single();
 
   if (error) return res.status(400).json({ error: "Roll No already exists or failed", details: error.message });
   res.json({ success: true, id: data?.id });
@@ -866,6 +872,11 @@ apiRouter.post("/transactions", asyncHandler(async (req, res) => {
   const insertPayload: any = {
     student_id, amount: Number(amount) || 0, payment_mode, transaction_id: finalTxId, academic_term, transaction_date, bank_account
   };
+  if (req.body.created_at) {
+    insertPayload.created_at = req.body.created_at;
+  } else if (transaction_date && transaction_date.includes('T')) {
+    insertPayload.created_at = transaction_date;
+  }
 
   let { data: inserted, error } = await supabase.from("transactions").insert(insertPayload).select().single();
 
@@ -938,12 +949,53 @@ apiRouter.delete("/transactions/:id", asyncHandler(async (req, res) => {
 
 // Reports
 apiRouter.get("/summary", asyncHandler(async (req, res) => {
-  const { data: txs } = await supabase.from("transactions").select("amount");
-  const { count: studentCount } = await supabase.from("students").select("*", { count: 'exact', head: true });
-  const { count: planCount } = await supabase.from("fee_plans").select("*", { count: 'exact', head: true });
-  
-  const totalCollections = txs?.reduce((sum, t) => sum + Number(t.amount), 0) || 0;
-  
+  const { data: txs } = await supabase.from("transactions").select("amount, student_id, created_at, transaction_date");
+  const { data: students } = await supabase.from("students").select("id, name, roll_no, plan_id");
+  const { data: plans } = await supabase.from("fee_plans").select("id, name, total_amount");
+
+  const totalCollections = txs?.reduce((sum, t) => sum + Number(t.amount || 0), 0) || 0;
+  const studentCount = students?.length || 0;
+  const planCount = plans?.length || 0;
+
+  // Student plan mapping
+  const studentPlanMap = new Map<number, number>();
+  students?.forEach(s => {
+    if (s.id && s.plan_id) studentPlanMap.set(Number(s.id), Number(s.plan_id));
+  });
+
+  // Fee plan total amount and name map
+  const planAmountMap = new Map<number, number>();
+  plans?.forEach(p => {
+    if (p.id) {
+      planAmountMap.set(Number(p.id), Number(p.total_amount || 0));
+    }
+  });
+
+  // Total Revenue = sum of plan total_amount for all enrolled students
+  let totalRevenue = 0;
+  students?.forEach(s => {
+    const pAmt = planAmountMap.get(Number(s.plan_id)) || 0;
+    totalRevenue += pAmt;
+  });
+
+  const outstandingDues = Math.max(0, totalRevenue - totalCollections);
+
+  // Collections by Course/Plan
+  const planCollectionsMap = new Map<number, number>();
+  plans?.forEach(p => planCollectionsMap.set(Number(p.id), 0));
+
+  txs?.forEach(t => {
+    const pId = studentPlanMap.get(Number(t.student_id));
+    if (pId !== undefined && planCollectionsMap.has(pId)) {
+      planCollectionsMap.set(pId, (planCollectionsMap.get(pId) || 0) + Number(t.amount || 0));
+    }
+  });
+
+  const collectionsByCourse = (plans || []).map(p => ({
+    name: p.name || 'General',
+    total: planCollectionsMap.get(Number(p.id)) || 0
+  }));
+
   const { data: recentTransactions } = await supabase
     .from("transactions")
     .select(`
@@ -995,9 +1047,12 @@ apiRouter.get("/summary", asyncHandler(async (req, res) => {
   })) || [];
 
   res.json({
+    totalRevenue,
     totalCollections,
-    studentCount: studentCount || 0,
-    planCount: planCount || 0,
+    outstandingDues,
+    studentCount,
+    planCount,
+    collectionsByCourse,
     editedTxCount: formattedEditedTxs.length,
     editedStudentCount: formattedEditedStudents.length,
     recentTransactions: formattedRecent,
@@ -1021,22 +1076,53 @@ apiRouter.get("/app-icon", (req, res) => {
   </svg>`);
 });
 
-// Download Android APK / Mobile App Installer
+// Mobile App PWA / App Installer route (No package manager needed)
 apiRouter.get("/download-apk", (req, res) => {
-  const apkFileName = "DCfeePay_MayaGroup.apk";
-  res.setHeader("Content-Disposition", `attachment; filename="${apkFileName}"`);
-  res.setHeader("Content-Type", "application/vnd.android.package-archive");
-  
-  const packageBundle = Buffer.from(JSON.stringify({
-    appName: "Maya Group - DCfeePay",
-    packageName: "com.mayagroup.dcfeepay",
-    version: "1.0.0",
-    build: "2026.1",
-    provider: "Digital Communique Private Limited",
-    icon: "/api/app-icon"
-  }, null, 2));
-
-  res.send(packageBundle);
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DCfeePay - Maya Group Mobile App Installer</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="/api/app-icon" />
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-white min-h-screen flex items-center justify-center p-4 font-sans">
+  <div class="max-w-md w-full bg-slate-800 rounded-3xl p-6 border border-slate-700 shadow-2xl text-center space-y-5">
+    <div class="w-20 h-20 bg-white rounded-2xl mx-auto p-1 shadow-xl flex items-center justify-center overflow-hidden">
+      <img src="/api/app-icon" alt="Logo" class="w-full h-full object-contain rounded-xl" />
+    </div>
+    <div>
+      <h1 class="text-xl font-black text-white">MAYA GROUP OF INSTITUTIONS</h1>
+      <p class="text-xs text-emerald-400 font-bold uppercase tracking-wider mt-1">DCfeePay Official Mobile Application</p>
+    </div>
+    <div class="bg-slate-900/80 rounded-2xl p-4 text-left border border-slate-700/80 space-y-3">
+      <div class="flex items-start gap-3">
+        <span class="w-6 h-6 rounded-full bg-emerald-500 text-slate-950 font-black text-xs flex items-center justify-center shrink-0">1</span>
+        <p class="text-xs text-slate-300">Tap browser menu <strong>(⋮ or Share icon)</strong> at the top/bottom.</p>
+      </div>
+      <div class="flex items-start gap-3">
+        <span class="w-6 h-6 rounded-full bg-emerald-500 text-slate-950 font-black text-xs flex items-center justify-center shrink-0">2</span>
+        <p class="text-xs text-slate-300">Select <strong>"Install App"</strong> or <strong>"Add to Home Screen"</strong>.</p>
+      </div>
+      <div class="flex items-start gap-3">
+        <span class="w-6 h-6 rounded-full bg-emerald-500 text-slate-950 font-black text-xs flex items-center justify-center shrink-0">3</span>
+        <p class="text-xs text-slate-300">Launch <strong>DCfeePay</strong> instantly from your mobile home screen!</p>
+      </div>
+    </div>
+    <div class="pt-2">
+      <a href="/" class="block w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg transition-all">
+        Open DCfeePay Mobile App Now
+      </a>
+    </div>
+    <p class="text-[10px] text-slate-400 font-semibold">
+      Zero package installation errors • Works on all Android & iOS devices
+    </p>
+  </div>
+</body>
+</html>`);
 });
 
 apiRouter.get("/ledger", asyncHandler(async (req, res) => {
@@ -1104,6 +1190,37 @@ apiRouter.get("/ledger", asyncHandler(async (req, res) => {
   
   res.json(ledger);
 }));
+
+// Serve PWA manifest and service worker
+app.get("/manifest.json", (req, res) => {
+  const manifestPath = path.join(__dirname, "public", "manifest.json");
+  if (fs.existsSync(manifestPath)) {
+    res.setHeader("Content-Type", "application/json");
+    return res.sendFile(manifestPath);
+  }
+  res.json({
+    short_name: "DCfeePay",
+    name: "Maya Group of Institutions - DCfeePay Fee Portal",
+    start_url: "/",
+    background_color: "#059669",
+    theme_color: "#059669",
+    display: "standalone",
+    icons: [{ src: "/api/app-icon", sizes: "192x192", type: "image/jpeg" }]
+  });
+});
+
+app.get("/sw.js", (req, res) => {
+  const swPath = path.join(__dirname, "public", "sw.js");
+  if (fs.existsSync(swPath)) {
+    res.setHeader("Content-Type", "application/javascript");
+    return res.sendFile(swPath);
+  }
+  res.setHeader("Content-Type", "application/javascript");
+  res.send(`
+    self.addEventListener('install', e => self.skipWaiting());
+    self.addEventListener('activate', e => self.clients.claim());
+  `);
+});
 
 // Mount the router
 app.use("/api", apiRouter);

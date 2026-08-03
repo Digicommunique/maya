@@ -258,7 +258,7 @@ export default function Reports() {
       let hours = d.getHours();
       const minutes = d.getMinutes().toString().padStart(2, '0');
       const seconds = d.getSeconds().toString().padStart(2, '0');
-      const ampm = hours >= 12 ? 'AM' : 'PM';
+      const ampm = hours >= 12 ? 'PM' : 'AM';
       
       hours = hours % 12;
       hours = hours ? hours : 12; // the hour '0' should be '12'
@@ -293,7 +293,7 @@ export default function Reports() {
     reader.onload = async (evt) => {
       try {
         const arrayBuffer = evt.target?.result;
-        const wb = XLSX.read(arrayBuffer, { type: 'array' });
+        const wb = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
         const data = XLSX.utils.sheet_to_json(ws);
@@ -341,6 +341,10 @@ export default function Reports() {
         const parseFlexibleDate = (dateVal: any): string => {
           if (!dateVal) return new Date().toISOString();
 
+          if (dateVal instanceof Date) {
+            if (!isNaN(dateVal.getTime())) return dateVal.toISOString();
+          }
+
           if (typeof dateVal === 'number') {
             const jsDate = new Date(Math.round((dateVal - 25569) * 86400 * 1000));
             if (!isNaN(jsDate.getTime())) return jsDate.toISOString();
@@ -352,26 +356,6 @@ export default function Reports() {
           const directDate = new Date(str);
           if (!isNaN(directDate.getTime())) {
             return directDate.toISOString();
-          }
-
-          const parts = str.split(/[\/\-\s:]/);
-          if (parts.length >= 3) {
-            const p1 = parseInt(parts[0], 10);
-            const p2 = parseInt(parts[1], 10);
-            const p3 = parseInt(parts[2], 10);
-
-            if (p3 > 1000) {
-              if (p1 <= 31 && p2 <= 12) {
-                let month = p2 - 1;
-                let day = p1;
-                if (p1 <= 12 && p2 > 12) {
-                  month = p1 - 1;
-                  day = p2;
-                }
-                const d = new Date(p3, month, day);
-                if (!isNaN(d.getTime())) return d.toISOString();
-              }
-            }
           }
 
           return new Date().toISOString();
@@ -510,7 +494,8 @@ export default function Reports() {
                     payment_mode: cleanMode,
                     transaction_id: cleanTxnId,
                     academic_term: cleanTerm,
-                    transaction_date: parsedDate
+                    transaction_date: parsedDate,
+                    created_at: parsedDate
                   })
                 });
 
@@ -527,7 +512,8 @@ export default function Reports() {
                         payment_mode: cleanMode,
                         transaction_id: autoTxnId,
                         academic_term: cleanTerm,
-                        transaction_date: parsedDate
+                        transaction_date: parsedDate,
+                        created_at: parsedDate
                       })
                     });
                   }

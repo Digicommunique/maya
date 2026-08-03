@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, User, ArrowRight, Download, Smartphone, CheckCircle } from 'lucide-react';
-import { motion } from 'motion/react';
+import { Lock, User, ArrowRight, Download, Smartphone, CheckCircle, X, Sparkles, Share, MoreVertical } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface LoginProps {
   onLogin: (staff: any) => void;
@@ -14,6 +14,7 @@ export default function Login({ onLogin, orgSettings }: LoginProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstalled, setIsInstalled] = useState(false);
+  const [showInstallGuide, setShowInstallGuide] = useState(false);
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: any) => {
@@ -34,25 +35,28 @@ export default function Login({ onLogin, orgSettings }: LoginProps) {
 
   const handleInstallApp = async () => {
     if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === 'accepted') {
-        setIsInstalled(true);
+      try {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+          setIsInstalled(true);
+        }
+        setDeferredPrompt(null);
+      } catch (err) {
+        console.warn("Install prompt error:", err);
+        setShowInstallGuide(true);
       }
-      setDeferredPrompt(null);
     } else {
-      // Direct APK download fallback
-      window.location.href = '/api/download-apk';
+      setShowInstallGuide(true);
     }
   };
 
   const handleDownloadApk = () => {
-    const link = document.createElement('a');
-    link.href = '/api/download-apk';
-    link.download = 'DCfeePay_MayaGroup.apk';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    if (deferredPrompt) {
+      handleInstallApp();
+    } else {
+      setShowInstallGuide(true);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -223,6 +227,84 @@ export default function Login({ onLogin, orgSettings }: LoginProps) {
           </div>
         </motion.div>
       </div>
+
+      {/* Mobile App Installation Guide Modal */}
+      <AnimatePresence>
+        {showInstallGuide && (
+          <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-slate-900 border border-slate-700 text-white rounded-3xl p-6 max-w-sm w-full shadow-2xl relative space-y-4"
+            >
+              <button
+                onClick={() => setShowInstallGuide(false)}
+                className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-full bg-slate-800 border border-slate-700"
+              >
+                <X size={18} />
+              </button>
+
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-white rounded-xl p-0.5 shrink-0 flex items-center justify-center border border-emerald-500/40 shadow-lg">
+                  <img src="/api/app-icon" alt="App Icon" className="w-full h-full object-contain rounded-lg" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-white">
+                    Maya Group DCfeePay App
+                  </h3>
+                  <p className="text-[11px] text-emerald-400 font-bold uppercase tracking-wider">
+                    Direct Mobile App Installation
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-slate-950/70 rounded-2xl p-4 border border-slate-800 space-y-3 text-xs">
+                <div className="flex items-start gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-emerald-500 text-slate-950 font-black text-[11px] flex items-center justify-center shrink-0 mt-0.5">1</span>
+                  <p className="text-slate-300">
+                    Tap the browser menu button <strong className="text-white">(⋮ on Chrome / Share <Share size={12} className="inline mx-0.5 text-blue-400" /> on Safari)</strong>.
+                  </p>
+                </div>
+                <div className="flex items-start gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-emerald-500 text-slate-950 font-black text-[11px] flex items-center justify-center shrink-0 mt-0.5">2</span>
+                  <p className="text-slate-300">
+                    Select <strong className="text-emerald-400">"Install App"</strong> or <strong className="text-emerald-400">"Add to Home Screen"</strong>.
+                  </p>
+                </div>
+                <div className="flex items-start gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-emerald-500 text-slate-950 font-black text-[11px] flex items-center justify-center shrink-0 mt-0.5">3</span>
+                  <p className="text-slate-300">
+                    Launch <strong className="text-white">DCfeePay</strong> directly from your phone home screen!
+                  </p>
+                </div>
+              </div>
+
+              <div className="pt-1 flex flex-col gap-2">
+                {deferredPrompt && (
+                  <button
+                    onClick={handleInstallApp}
+                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Smartphone size={16} />
+                    One-Tap Install Now
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowInstallGuide(false)}
+                  className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl border border-slate-700 transition-all cursor-pointer"
+                >
+                  Got It, Thanks
+                </button>
+              </div>
+
+              <p className="text-[10px] text-center text-slate-400 font-medium">
+                100% Native Web App • Zero Package Installation Errors
+              </p>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Software Developer Footer */}
       <footer className="text-center pt-4">
