@@ -18,7 +18,8 @@ import {
   Share2,
   History,
   Printer,
-  FileDown
+  FileDown,
+  Loader2
 } from 'lucide-react';
 import { safeFetchJson } from '../utils/api';
 import { motion, AnimatePresence } from 'motion/react';
@@ -37,6 +38,7 @@ export default function StudentDirectory() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [semesters, setSemesters] = useState<Semester[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -162,6 +164,7 @@ export default function StudentDirectory() {
   });
 
   const fetchData = () => {
+    setIsLoading(true);
     Promise.all([
       safeFetchJson('/api/students', undefined, []),
       safeFetchJson('/api/fee-plans', undefined, []),
@@ -190,6 +193,8 @@ export default function StudentDirectory() {
       setBranches([]);
       setSemesters([]);
       setSessions([]);
+    }).finally(() => {
+      setIsLoading(false);
     });
   };
 
@@ -875,7 +880,16 @@ export default function StudentDirectory() {
                   </td>
                 </tr>
               ))}
-              {filteredStudents.length === 0 && (
+              {isLoading ? (
+                <tr>
+                  <td colSpan={7} className="py-16 text-center">
+                    <div className="flex flex-col items-center justify-center text-emerald-600 gap-2">
+                      <Loader2 size={32} className="animate-spin" />
+                      <p className="font-semibold text-xs text-slate-500">Loading Student Directory...</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : filteredStudents.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-20 text-center">
                     <div className="flex flex-col items-center justify-center text-slate-400">
@@ -884,7 +898,7 @@ export default function StudentDirectory() {
                     </div>
                   </td>
                 </tr>
-              )}
+              ) : null}
             </tbody>
           </table>
         </div>

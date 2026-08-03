@@ -680,19 +680,29 @@ apiRouter.put("/fee-plans/:id", asyncHandler(async (req, res) => {
 
 // Students
 apiRouter.get("/students", asyncHandler(async (req, res) => {
-  const { data: students, error } = await supabase
-    .from("students")
-    .select(`
-      *,
-      plan:fee_plans(name, total_amount),
-      branch:branches(name),
-      semester:semesters(name),
-      session:sessions(name),
-      transactions(amount)
-    `)
-    .order("id", { ascending: false });
+  const [{ data: students, error }, { data: txs }] = await Promise.all([
+    supabase
+      .from("students")
+      .select(`
+        *,
+        plan:fee_plans(name, total_amount),
+        branch:branches(name),
+        semester:semesters(name),
+        session:sessions(name)
+      `)
+      .order("id", { ascending: false }),
+    supabase.from("transactions").select("student_id, amount")
+  ]);
     
   if (error) return res.status(500).json({ error: error.message });
+
+  const studentPaidMap = new Map<number, number>();
+  (txs || []).forEach((t: any) => {
+    if (t.student_id) {
+      const current = studentPaidMap.get(Number(t.student_id)) || 0;
+      studentPaidMap.set(Number(t.student_id), current + Number(t.amount || 0));
+    }
+  });
   
   // Format data to match previous structure
   const formatted = (students || []).map((s: any) => ({
@@ -702,7 +712,7 @@ apiRouter.get("/students", asyncHandler(async (req, res) => {
     branch_name: s.branch?.name,
     semester_name: s.semester?.name,
     session_name: s.session?.name,
-    total_paid: s.transactions?.reduce((sum: number, t: any) => sum + Number(t.amount || 0), 0) || 0
+    total_paid: studentPaidMap.get(Number(s.id)) || 0
   }));
   
   res.json(formatted);
