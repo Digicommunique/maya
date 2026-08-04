@@ -1310,7 +1310,7 @@ apiRouter.put("/transactions/:id", asyncHandler(async (req, res) => {
 }));
 
 apiRouter.delete("/transactions/clear-all", asyncHandler(async (req, res) => {
-  const { error, count } = await supabase.from("transactions").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+  const { error, count } = await supabase.from("transactions").delete().gt("id", -1);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true, message: "All financial collection transaction records deleted successfully." });
 }));
