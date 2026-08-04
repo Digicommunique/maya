@@ -4,7 +4,7 @@ import fs from "fs";
 import { fileURLToPath } from "url";
 import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 
 dotenv.config();
 
@@ -1058,6 +1058,134 @@ apiRouter.post("/transactions/bulk", asyncHandler(async (req, res) => {
   }
 
   res.json({ success: true, count: savedList.length, savedList, errors });
+}));
+
+// PDF Collection Sheet Parser Endpoint powered by Gemini AI
+apiRouter.post("/parse-collection-pdf", asyncHandler(async (req, res) => {
+  const { pdfBase64, pdfText } = req.body;
+
+  if (!pdfBase64 && !pdfText) {
+    return res.status(400).json({ error: "MISSING_DATA", message: "pdfBase64 or pdfText is required." });
+  }
+
+  // Retrieve all students for student matching
+  const { data: dbStudents } = await supabase.from("students").select("id, name, roll_no, phone");
+  const studentsList = dbStudents || [];
+
+  let extractedRows: any[] = [];
+
+  try {
+    const aiKey = process.env.GEMINI_API_KEY;
+    if (aiKey) {
+      const ai = new GoogleGenAI({
+        apiKey: aiKey,
+        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
+      });
+
+      const contents: any[] = [];
+
+      if (pdfBase64) {
+        const cleanBase64 = pdfBase64.replace(/^data:application\/pdf;base64,/, '').trim();
+        contents.push({
+          inlineData: {
+            mimeType: 'application/pdf',
+            data: cleanBase64
+          }
+        });
+      }
+
+      contents.push({
+        text: `You are an expert financial auditor & accounting AI assistant for Maya Group of Institutions.
+Analyze this financial collections data sheet PDF / report and extract every transaction / fee payment record line item.
+
+${pdfText ? `PDF Text Content:\n${pdfText}\n` : ''}
+
+Extract each payment row with:
+- student_identifier: The student's full name, roll number, admission number, or student ID as listed in the sheet.
+- amount: Numeric payment amount collected (e.g. 15000).
+- payment_mode: Payment method ("Cash", "UPI", "Bank Transfer", "Online", "DD", or "Cheque").
+- transaction_id: Transaction ID / UTR No / Receipt No if listed, otherwise empty string "".
+- transaction_date: Date of payment in YYYY-MM-DD format (if unspecified, use current date ${new Date().toISOString().split('T')[0]}).
+- fee_head_or_notes: Academic semester, course, or remarks (e.g. "Tuition Fee", "Semester 1", "Bus Fee").
+
+Return a valid JSON array of objects.`
+      });
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.6-flash',
+        contents,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                student_identifier: { type: Type.STRING },
+                amount: { type: Type.NUMBER },
+                payment_mode: { type: Type.STRING },
+                transaction_id: { type: Type.STRING },
+                transaction_date: { type: Type.STRING },
+                fee_head_or_notes: { type: Type.STRING }
+              },
+              required: ["student_identifier", "amount"]
+            }
+          }
+        }
+      });
+
+      if (response.text) {
+        extractedRows = JSON.parse(response.text.trim());
+      }
+    }
+  } catch (err: any) {
+    console.error("[GEMINI PDF PARSE ERROR]", err);
+  }
+
+  // Intelligent matching against existing student directory
+  const matchedRecords = extractedRows.map((row: any, index: number) => {
+    const rawIdentifier = String(row.student_identifier || '').trim();
+    const cleanLowerIdent = rawIdentifier.toLowerCase();
+
+    // Match by roll_no
+    let matchedStudent = studentsList.find(s => 
+      s.roll_no && s.roll_no.trim().toLowerCase() === cleanLowerIdent
+    );
+
+    // Match by student name
+    if (!matchedStudent) {
+      matchedStudent = studentsList.find(s => 
+        s.name && (s.name.trim().toLowerCase() === cleanLowerIdent || cleanLowerIdent.includes(s.name.trim().toLowerCase()))
+      );
+    }
+
+    // Partial roll_no match
+    if (!matchedStudent && rawIdentifier.length >= 3) {
+      matchedStudent = studentsList.find(s => 
+        s.roll_no && s.roll_no.toLowerCase().includes(cleanLowerIdent)
+      );
+    }
+
+    return {
+      id: `extracted_${index}_${Date.now()}`,
+      raw_identifier: rawIdentifier,
+      matched_student_id: matchedStudent ? matchedStudent.id : null,
+      matched_student_name: matchedStudent ? matchedStudent.name : '',
+      matched_roll_no: matchedStudent ? matchedStudent.roll_no : '',
+      amount: Number(row.amount) || 0,
+      payment_mode: row.payment_mode || 'Cash',
+      transaction_id: row.transaction_id ? String(row.transaction_id).trim() : '',
+      transaction_date: row.transaction_date || new Date().toISOString().split('T')[0],
+      fee_head_or_notes: row.fee_head_or_notes || 'Fee Collection PDF Sheet',
+      academic_term: '2026-27'
+    };
+  });
+
+  res.json({
+    success: true,
+    total_parsed: matchedRecords.length,
+    records: matchedRecords
+  });
 }));
 
 apiRouter.put("/transactions/:id", asyncHandler(async (req, res) => {

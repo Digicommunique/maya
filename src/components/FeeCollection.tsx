@@ -29,7 +29,12 @@ import {
   ChevronUp,
   Grid,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  UploadCloud,
+  FileText,
+  Check,
+  AlertTriangle,
+  Download
 } from 'lucide-react';
 import { safeFetchJson } from '../utils/api';
 import { motion, AnimatePresence } from 'motion/react';
@@ -73,6 +78,150 @@ export default function FeeCollection() {
   const [historyStartDate, setHistoryStartDate] = useState('');
   const [historyEndDate, setHistoryEndDate] = useState('');
   const [datePreset, setDatePreset] = useState('all');
+
+  // PDF Financial Collection Upload State
+  const [isPdfUploadModalOpen, setIsPdfUploadModalOpen] = useState(false);
+  const [isParsingPdf, setIsParsingPdf] = useState(false);
+  const [pdfParseError, setPdfParseError] = useState<string | null>(null);
+  const [parsedPdfRecords, setParsedPdfRecords] = useState<any[]>([]);
+  const [selectedPdfRowIds, setSelectedPdfRowIds] = useState<Set<string>>(new Set());
+  const [isImportingPdfRecords, setIsImportingPdfRecords] = useState(false);
+  const [pdfSearchQuery, setPdfSearchQuery] = useState('');
+  const [pdfImportStatus, setPdfImportStatus] = useState<string | null>(null);
+
+  const handlePdfFileSelect = async (fileInput: File | null) => {
+    if (!fileInput) return;
+
+    if (!fileInput.name.toLowerCase().endsWith('.pdf')) {
+      setPdfParseError('Please upload a valid PDF document (.pdf).');
+      return;
+    }
+
+    setIsParsingPdf(true);
+    setPdfParseError(null);
+    setPdfImportStatus(null);
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const pdfBase64 = reader.result as string;
+        try {
+          const res = await fetch('/api/parse-collection-pdf', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pdfBase64 })
+          });
+
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.message || 'Failed to parse PDF document.');
+          }
+
+          if (data.records && data.records.length > 0) {
+            setParsedPdfRecords(data.records);
+            setSelectedPdfRowIds(new Set(data.records.map((r: any) => r.id)));
+          } else {
+            setPdfParseError('No financial collection records could be automatically parsed from this PDF. You can try downloading our sample template or adding records manually.');
+          }
+        } catch (err: any) {
+          setPdfParseError(err.message || 'Server error while parsing PDF.');
+        } finally {
+          setIsParsingPdf(false);
+        }
+      };
+      reader.readAsDataURL(fileInput);
+    } catch (err: any) {
+      setPdfParseError('Error reading file: ' + err.message);
+      setIsParsingPdf(false);
+    }
+  };
+
+  const handleDownloadSamplePdf = () => {
+    const doc = new jsPDF();
+    doc.setFontSize(18);
+    doc.text("MAYA GROUP OF INSTITUTIONS", 14, 20);
+    doc.setFontSize(12);
+    doc.text("Daily Financial Fee Collections Data Sheet", 14, 28);
+    doc.setFontSize(10);
+    doc.text(`Generated Date: ${format(new Date(), 'yyyy-MM-dd')} | Academic Term: 2026-27`, 14, 34);
+
+    const sampleRows = students.slice(0, 5).map((st, i) => [
+      (i + 1).toString(),
+      st.name,
+      st.roll_no || `ROLL-00${i+1}`,
+      ((i + 1) * 5000).toString(),
+      i % 2 === 0 ? 'UPI' : 'Cash',
+      i % 2 === 0 ? `UPI_REF_${Math.floor(100000 + Math.random() * 900000)}` : `CASH_${Math.floor(1000 + Math.random() * 9000)}`,
+      format(new Date(), 'yyyy-MM-dd'),
+      'Tuition Fee'
+    ]);
+
+    if (sampleRows.length === 0) {
+      sampleRows.push(
+        ["1", "Alice Johnson", "CS-2025-001", "15000", "UPI", "UPI_REF_981234", format(new Date(), 'yyyy-MM-dd'), "Tuition Fee"],
+        ["2", "Bob Smith", "EE-2025-042", "12000", "Bank Transfer", "NEFT_887123", format(new Date(), 'yyyy-MM-dd'), "Tuition Fee"]
+      );
+    }
+
+    autoTable(doc, {
+      startY: 40,
+      head: [["S.No", "Student Name", "Roll / ID No", "Amount (₹)", "Payment Mode", "Transaction ID / UTR", "Date", "Remarks"]],
+      body: sampleRows,
+      theme: 'grid',
+      headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' }
+    });
+
+    doc.save(`Sample_Financial_Collections_Sheet_${format(new Date(), 'yyyyMMdd')}.pdf`);
+  };
+
+  const handleBulkImportPdfRecords = async () => {
+    const recordsToImport = parsedPdfRecords.filter(r => selectedPdfRowIds.has(r.id) && r.matched_student_id);
+
+    if (recordsToImport.length === 0) {
+      alert('Please select at least one valid record with a matched student to import.');
+      return;
+    }
+
+    setIsImportingPdfRecords(true);
+    setPdfImportStatus('Importing financial collection records to database...');
+
+    const txPayloads = recordsToImport.map((r, idx) => ({
+      student_id: r.matched_student_id,
+      amount: Number(r.amount) || 0,
+      payment_mode: r.payment_mode || 'Cash',
+      transaction_id: r.transaction_id || `PDF_TXN_${Date.now()}_${idx + 1}`,
+      academic_term: r.academic_term || '2026-27',
+      transaction_date: r.transaction_date || format(new Date(), 'yyyy-MM-dd'),
+      bank_account: ''
+    }));
+
+    try {
+      const res = await fetch('/api/transactions/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transactions: txPayloads })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || (data.errors && data.errors[0]) || 'Bulk import failed.');
+      }
+
+      setPdfImportStatus(`Successfully imported ${data.count || recordsToImport.length} financial collection records!`);
+      setTimeout(() => {
+        setIsPdfUploadModalOpen(false);
+        setParsedPdfRecords([]);
+        setIsImportingPdfRecords(false);
+        setPdfImportStatus(null);
+        loadRecentTransactions();
+      }, 1200);
+
+    } catch (err: any) {
+      alert(`Import error: ${err.message}`);
+      setIsImportingPdfRecords(false);
+      setPdfImportStatus(null);
+    }
+  };
 
   const handlePresetChange = (preset: string) => {
     setDatePreset(preset);
@@ -977,9 +1126,22 @@ export default function FeeCollection() {
     <div className="max-w-4xl mx-auto space-y-8">
       {!isSuccess ? (
         <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden">
-          <div className="p-5 sm:p-8 bg-slate-900 text-white">
-            <h3 className="text-xl sm:text-2xl font-bold">Record Payment</h3>
-            <p className="text-slate-400 text-xs sm:text-sm mt-1">Search student and record payment details</p>
+          <div className="p-5 sm:p-8 bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-xl sm:text-2xl font-bold">Record Payment</h3>
+              <p className="text-slate-400 text-xs sm:text-sm mt-1">Search student and record payment details or upload PDF collection sheet</p>
+            </div>
+            <button 
+              type="button"
+              onClick={() => {
+                setPdfParseError(null);
+                setIsPdfUploadModalOpen(true);
+              }}
+              className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white rounded-xl text-xs sm:text-sm font-extrabold transition-all flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20"
+            >
+              <UploadCloud size={18} />
+              <span>Upload Collections PDF Sheet</span>
+            </button>
           </div>
 
           <div className="p-4 sm:p-8 space-y-6 sm:space-y-8">
@@ -1334,6 +1496,19 @@ export default function FeeCollection() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {/* Upload PDF Sheet */}
+            <button 
+              onClick={() => {
+                setPdfParseError(null);
+                setIsPdfUploadModalOpen(true);
+              }}
+              className="px-3 py-2 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+              title="Upload PDF Financial Collection Sheet"
+            >
+              <UploadCloud size={15} />
+              <span>Upload PDF Sheet</span>
+            </button>
+
             {/* Toggle Analytics Card */}
             <button 
               onClick={() => setShowAnalytics(!showAnalytics)}
@@ -2004,6 +2179,338 @@ export default function FeeCollection() {
                     Close Audit View
                   </button>
                 </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Upload Financial Collections PDF Modal */}
+      <AnimatePresence>
+        {isPdfUploadModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-5xl max-h-[92vh] overflow-hidden flex flex-col"
+            >
+              {/* Modal Header */}
+              <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl text-white shadow-lg shadow-amber-500/30">
+                    <Sparkles size={22} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-extrabold tracking-tight">Upload Financial Collections PDF</h3>
+                    <p className="text-slate-400 text-xs mt-0.5">Automated AI extraction & directory student matching powered by Gemini 3.6</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setIsPdfUploadModalOpen(false)}
+                  className="p-2 hover:bg-white/10 rounded-full text-slate-400 hover:text-white transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-6 overflow-y-auto flex-1 space-y-6">
+                {/* Upload Box / Action Bar */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="md:col-span-2 border-2 border-dashed border-slate-300 hover:border-amber-500 bg-slate-50 hover:bg-amber-50/30 rounded-2xl p-6 text-center transition-all cursor-pointer relative group">
+                    <input 
+                      type="file" 
+                      accept=".pdf"
+                      onChange={e => {
+                        if (e.target.files && e.target.files[0]) {
+                          handlePdfFileSelect(e.target.files[0]);
+                        }
+                      }}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                    />
+                    <div className="flex flex-col items-center justify-center space-y-2 pointer-events-none">
+                      <div className="p-3 bg-white shadow-md rounded-2xl text-amber-600 group-hover:scale-110 transition-transform">
+                        <UploadCloud size={28} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-slate-800">
+                          Click to browse or drag & drop Financial Collection PDF Data Sheet
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Supports daily fee registers, bank statements, and collection reports (.pdf)
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-5 flex flex-col justify-between space-y-3">
+                    <div>
+                      <div className="flex items-center gap-1.5 text-amber-800 font-extrabold text-xs uppercase tracking-wider">
+                        <FileText size={16} />
+                        <span>Need a Template?</span>
+                      </div>
+                      <p className="text-xs text-amber-900/80 mt-1 leading-relaxed">
+                        Download our official pre-formatted Maya Group sample collection PDF data sheet to test uploading.
+                      </p>
+                    </div>
+                    <button 
+                      type="button"
+                      onClick={handleDownloadSamplePdf}
+                      className="w-full py-2.5 px-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm"
+                    >
+                      <Download size={15} />
+                      <span>Download Sample PDF Sheet</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Parsing Loader */}
+                {isParsingPdf && (
+                  <div className="p-8 bg-blue-50/80 border border-blue-200 rounded-2xl flex flex-col items-center justify-center space-y-3 text-center">
+                    <RefreshCw className="animate-spin text-blue-600" size={32} />
+                    <div>
+                      <p className="text-sm font-bold text-blue-900">Extracting Fee Collections with Gemini AI...</p>
+                      <p className="text-xs text-blue-700 mt-0.5">Analyzing document structure, payment modes, amounts, and student IDs</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Error Banner */}
+                {pdfParseError && (
+                  <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-start gap-3 text-rose-800">
+                    <AlertTriangle size={20} className="text-rose-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-bold">{pdfParseError}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Extracted Records Review Table */}
+                {parsedPdfRecords.length > 0 && !isParsingPdf && (
+                  <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-100 p-4 rounded-2xl">
+                      <div className="flex items-center gap-4 text-xs font-bold text-slate-700">
+                        <span className="bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm">
+                          Total Parsed: <span className="text-blue-600 font-mono text-sm">{parsedPdfRecords.length}</span>
+                        </span>
+                        <span className="bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm">
+                          Selected: <span className="text-emerald-600 font-mono text-sm">{selectedPdfRowIds.size}</span>
+                        </span>
+                        <span className="bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm">
+                          Total Amount: <span className="text-emerald-700 font-mono text-sm">₹{parsedPdfRecords
+                            .filter(r => selectedPdfRowIds.has(r.id))
+                            .reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
+                            .toLocaleString()}</span>
+                        </span>
+                      </div>
+
+                      <div className="relative w-full sm:w-64">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                        <input 
+                          type="text"
+                          placeholder="Filter extracted items..."
+                          value={pdfSearchQuery}
+                          onChange={e => setPdfSearchQuery(e.target.value)}
+                          className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white max-h-[42vh]">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead className="sticky top-0 bg-slate-900 text-white z-10 font-bold">
+                          <tr>
+                            <th className="p-3 w-10 text-center">
+                              <input 
+                                type="checkbox"
+                                checked={selectedPdfRowIds.size === parsedPdfRecords.length && parsedPdfRecords.length > 0}
+                                onChange={e => {
+                                  if (e.target.checked) {
+                                    setSelectedPdfRowIds(new Set(parsedPdfRecords.map(r => r.id)));
+                                  } else {
+                                    setSelectedPdfRowIds(new Set());
+                                  }
+                                }}
+                                className="rounded text-emerald-600 focus:ring-emerald-500"
+                              />
+                            </th>
+                            <th className="p-3">Matched Student in System</th>
+                            <th className="p-3">PDF Raw Identifier</th>
+                            <th className="p-3">Amount (₹)</th>
+                            <th className="p-3">Payment Mode</th>
+                            <th className="p-3">Transaction / UTR ID</th>
+                            <th className="p-3">Date</th>
+                            <th className="p-3 text-center">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                          {parsedPdfRecords
+                            .filter(r => 
+                              !pdfSearchQuery || 
+                              (r.raw_identifier && r.raw_identifier.toLowerCase().includes(pdfSearchQuery.toLowerCase())) ||
+                              (r.matched_student_name && r.matched_student_name.toLowerCase().includes(pdfSearchQuery.toLowerCase())) ||
+                              (r.transaction_id && r.transaction_id.toLowerCase().includes(pdfSearchQuery.toLowerCase()))
+                            )
+                            .map((record) => {
+                              const isSelected = selectedPdfRowIds.has(record.id);
+                              return (
+                                <tr key={record.id} className={isSelected ? 'bg-emerald-50/40 hover:bg-emerald-50/80' : 'hover:bg-slate-50'}>
+                                  <td className="p-3 text-center">
+                                    <input 
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={() => {
+                                        const newSet = new Set(selectedPdfRowIds);
+                                        if (newSet.has(record.id)) newSet.delete(record.id);
+                                        else newSet.add(record.id);
+                                        setSelectedPdfRowIds(newSet);
+                                      }}
+                                      className="rounded text-emerald-600 focus:ring-emerald-500"
+                                    />
+                                  </td>
+                                  <td className="p-3">
+                                    <select 
+                                      value={record.matched_student_id || ''}
+                                      onChange={e => {
+                                        const stId = Number(e.target.value);
+                                        const st = students.find(s => s.id === stId);
+                                        setParsedPdfRecords(prev => prev.map(p => p.id === record.id ? {
+                                          ...p,
+                                          matched_student_id: stId || null,
+                                          matched_student_name: st ? st.name : '',
+                                          matched_roll_no: st ? st.roll_no : ''
+                                        } : p));
+                                      }}
+                                      className={cn(
+                                        "w-full px-2.5 py-1.5 rounded-lg border text-xs font-semibold outline-none",
+                                        record.matched_student_id 
+                                          ? "border-emerald-300 bg-emerald-50/50 text-emerald-900" 
+                                          : "border-rose-300 bg-rose-50/50 text-rose-900"
+                                      )}
+                                    >
+                                      <option value="">-- Select Student --</option>
+                                      {students.map(s => (
+                                        <option key={s.id} value={s.id}>
+                                          {s.name} ({s.roll_no || 'No Roll'})
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </td>
+                                  <td className="p-3 font-semibold text-slate-800">
+                                    {record.raw_identifier || 'N/A'}
+                                  </td>
+                                  <td className="p-3">
+                                    <input 
+                                      type="number"
+                                      value={record.amount}
+                                      onChange={e => {
+                                        const val = e.target.value;
+                                        setParsedPdfRecords(prev => prev.map(p => p.id === record.id ? { ...p, amount: val } : p));
+                                      }}
+                                      className="w-24 px-2 py-1 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-900"
+                                    />
+                                  </td>
+                                  <td className="p-3">
+                                    <select 
+                                      value={record.payment_mode}
+                                      onChange={e => {
+                                        const val = e.target.value;
+                                        setParsedPdfRecords(prev => prev.map(p => p.id === record.id ? { ...p, payment_mode: val } : p));
+                                      }}
+                                      className="px-2 py-1 border border-slate-200 rounded-lg text-xs font-semibold bg-white"
+                                    >
+                                      <option value="UPI">UPI</option>
+                                      <option value="Cash">Cash</option>
+                                      <option value="Bank Transfer">Bank Transfer</option>
+                                      <option value="Online">Online</option>
+                                      <option value="DD">DD</option>
+                                      <option value="Cheque">Cheque</option>
+                                    </select>
+                                  </td>
+                                  <td className="p-3">
+                                    <input 
+                                      type="text"
+                                      value={record.transaction_id}
+                                      onChange={e => {
+                                        const val = e.target.value;
+                                        setParsedPdfRecords(prev => prev.map(p => p.id === record.id ? { ...p, transaction_id: val } : p));
+                                      }}
+                                      placeholder="Txn ID..."
+                                      className="w-28 px-2 py-1 border border-slate-200 rounded-lg text-xs font-mono"
+                                    />
+                                  </td>
+                                  <td className="p-3">
+                                    <input 
+                                      type="date"
+                                      value={record.transaction_date}
+                                      onChange={e => {
+                                        const val = e.target.value;
+                                        setParsedPdfRecords(prev => prev.map(p => p.id === record.id ? { ...p, transaction_date: val } : p));
+                                      }}
+                                      className="px-2 py-1 border border-slate-200 rounded-lg text-xs"
+                                    />
+                                  </td>
+                                  <td className="p-3 text-center">
+                                    <button 
+                                      onClick={() => {
+                                        setParsedPdfRecords(prev => prev.filter(p => p.id !== record.id));
+                                        const newSet = new Set(selectedPdfRowIds);
+                                        newSet.delete(record.id);
+                                        setSelectedPdfRowIds(newSet);
+                                      }}
+                                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                      title="Remove Row"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Import Status Toast */}
+                {pdfImportStatus && (
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-3 text-emerald-800 font-bold text-xs">
+                    <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+                    <span>{pdfImportStatus}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <button 
+                  onClick={() => setIsPdfUploadModalOpen(false)}
+                  className="px-5 py-2.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 rounded-xl font-bold text-xs transition-colors w-full sm:w-auto"
+                >
+                  Cancel
+                </button>
+
+                {parsedPdfRecords.length > 0 && (
+                  <button 
+                    onClick={handleBulkImportPdfRecords}
+                    disabled={isImportingPdfRecords || selectedPdfRowIds.size === 0}
+                    className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl font-extrabold text-xs transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 w-full sm:w-auto"
+                  >
+                    {isImportingPdfRecords ? (
+                      <>
+                        <RefreshCw size={15} className="animate-spin" />
+                        <span>Importing Collections...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check size={16} />
+                        <span>Confirm & Import {selectedPdfRowIds.size} Collection Records</span>
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             </motion.div>
           </div>
