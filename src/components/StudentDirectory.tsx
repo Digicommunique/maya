@@ -31,6 +31,7 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import autoTable from 'jspdf-autotable';
 import Receipt from './Receipt';
+import CourseSessionStudentBreakdown from './CourseSessionStudentBreakdown';
 
 export default function StudentDirectory({ user }: { user?: any }) {
   const isAccountant = user?.role === 'accountant';
@@ -708,6 +709,9 @@ export default function StudentDirectory({ user }: { user?: any }) {
           </button>
         </div>
       </div>
+
+      {/* Course-wise and Session-wise Student Breakdown */}
+      <CourseSessionStudentBreakdown students={students} />
 
       {/* Filters */}
       <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center flex-wrap gap-3 sm:gap-4">

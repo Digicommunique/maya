@@ -59,11 +59,13 @@ import {
 
 import Receipt from './Receipt';
 import { OrgSettings } from '../types';
+import CourseSessionStudentBreakdown from './CourseSessionStudentBreakdown';
 
 export default function Reports() {
   const navigate = useNavigate();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [ledger, setLedger] = useState<any[]>([]);
+  const [studentsList, setStudentsList] = useState<any[]>([]);
   const [settings, setSettings] = useState<OrgSettings | null>(null);
   const [search, setSearch] = useState('');
   const [dateRange, setDateRange] = useState({ from: '', to: '' });
@@ -271,12 +273,14 @@ export default function Reports() {
 
   const refreshData = async () => {
     try {
-      const [freshTxs, freshLedger] = await Promise.all([
+      const [freshTxs, freshLedger, freshStudents] = await Promise.all([
         fetch('/api/transactions').then(r => r.json()),
-        fetch('/api/ledger').then(r => r.json())
+        fetch('/api/ledger').then(r => r.json()),
+        fetch('/api/students').then(r => r.json())
       ]);
       setTransactions(Array.isArray(freshTxs) ? freshTxs : []);
       setLedger(Array.isArray(freshLedger) ? freshLedger : []);
+      setStudentsList(Array.isArray(freshStudents) ? freshStudents : []);
     } catch (err) {
       console.error("Error refreshing data:", err);
     }
@@ -1294,6 +1298,8 @@ export default function Reports() {
             exit={{ opacity: 0, height: 0 }}
             className="space-y-6 overflow-hidden"
           >
+            {/* Course-wise and Session-wise Student Breakdown */}
+            <CourseSessionStudentBreakdown students={studentsList.length > 0 ? studentsList : ledger} />
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Chart 1: Collection Forecast Trend */}
               <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">

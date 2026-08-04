@@ -111,8 +111,8 @@ ALTER TABLE students ADD COLUMN IF NOT EXISTS previous_data JSONB;
 
 -- Initial Staff Seed
 INSERT INTO staff (staff_id, name, password, role) 
-VALUES ('admin', 'Administrator', '12345', 'admin')
-ON CONFLICT (staff_id) DO UPDATE SET password = '12345';
+VALUES ('admin', 'Administrator', 'MayaDCfee@12345', 'admin')
+ON CONFLICT (staff_id) DO UPDATE SET password = 'MayaDCfee@12345';
 
 -- Enable Row Level Security (RLS) on all tables to resolve the database linter errors
 ALTER TABLE org_settings ENABLE ROW LEVEL SECURITY;

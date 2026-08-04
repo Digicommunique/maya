@@ -40,6 +40,8 @@ import {
   Legend 
 } from 'recharts';
 
+import CourseSessionStudentBreakdown from './CourseSessionStudentBreakdown';
+
 export default function Dashboard({ setActiveTab, user }: { setActiveTab: (tab: string) => void, user: any }) {
   const safeFormatDate = (dateVal: any, pattern: string = 'MMM dd, yyyy • hh:mm a') => {
     if (!dateVal) return 'N/A';
@@ -69,6 +71,7 @@ export default function Dashboard({ setActiveTab, user }: { setActiveTab: (tab: 
   const [summary, setSummary] = useState<any>(null);
   const [allTxs, setAllTxs] = useState<any[]>([]);
   const [allLedger, setAllLedger] = useState<any[]>([]);
+  const [allStudents, setAllStudents] = useState<any[]>([]);
   const [activeAuditTab, setActiveAuditTab] = useState<'transactions' | 'students'>('transactions');
   const [viewingAuditTx, setViewingAuditTx] = useState<any>(null);
   const [viewingAuditStudent, setViewingAuditStudent] = useState<any>(null);
@@ -79,14 +82,16 @@ export default function Dashboard({ setActiveTab, user }: { setActiveTab: (tab: 
     Promise.all([
       safeFetchJson('/api/summary', undefined, null),
       safeFetchJson('/api/transactions', undefined, []),
-      safeFetchJson('/api/ledger', undefined, [])
+      safeFetchJson('/api/ledger', undefined, []),
+      safeFetchJson('/api/students', undefined, [])
     ])
-    .then(([summaryData, txsData, ledgerData]) => {
+    .then(([summaryData, txsData, ledgerData, studentsData]) => {
       if (summaryData && !summaryData.error) {
         setSummary(summaryData);
       }
       if (Array.isArray(txsData)) setAllTxs(txsData);
       if (Array.isArray(ledgerData)) setAllLedger(ledgerData);
+      if (Array.isArray(studentsData)) setAllStudents(studentsData);
     })
     .catch(err => console.error("Dashboard data fetch error:", err));
   }, []);
@@ -277,6 +282,11 @@ export default function Dashboard({ setActiveTab, user }: { setActiveTab: (tab: 
           </motion.div>
         ))}
       </div>
+
+      {/* Course-wise and Session-wise Student Breakdown */}
+      <CourseSessionStudentBreakdown 
+        students={allStudents.length > 0 ? allStudents : (allLedger || [])} 
+      />
 
       {/* Visual Analytics & Forecast Trend Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

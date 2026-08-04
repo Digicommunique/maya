@@ -562,32 +562,12 @@ export default function Settings() {
                         status.readable ? "bg-emerald-500" : "bg-red-500"
                       )} />
                       <span className="text-xs font-medium text-slate-500">
-                        {status.readable ? 'Accessible' : 'Blocked (RLS)'}
+                        {status.readable ? 'Accessible' : 'Access Restricted'}
                       </span>
                     </div>
                   </div>
                 );
               })}
-            </div>
-
-            <div className="bg-amber-50 border border-amber-200 p-6 rounded-2xl space-y-4">
-              <h5 className="font-bold text-amber-800 flex items-center gap-2">
-                <PlusCircle size={18} />
-                How to fix "Blocked (RLS)" issues
-              </h5>
-              <p className="text-sm text-amber-700 leading-relaxed">
-                If any table shows as <strong>Blocked (RLS)</strong>, it means Supabase is preventing the application from reading or writing data. 
-                This usually happens when Row-Level Security is enabled without the correct policies.
-              </p>
-              <div className="bg-white/50 p-4 rounded-xl space-y-2">
-                <p className="text-xs font-bold text-amber-900 uppercase tracking-wider">Run this in your Supabase SQL Editor:</p>
-                <code className="block text-xs font-mono bg-slate-900 text-slate-100 p-4 rounded-lg overflow-x-auto">
-                  ALTER TABLE branches DISABLE ROW LEVEL SECURITY;<br />
-                  ALTER TABLE semesters DISABLE ROW LEVEL SECURITY;<br />
-                  ALTER TABLE sessions DISABLE ROW LEVEL SECURITY;<br />
-                  ALTER TABLE students DISABLE ROW LEVEL SECURITY;
-                </code>
-              </div>
             </div>
           </div>
         )}
