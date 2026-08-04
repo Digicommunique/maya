@@ -95,6 +95,14 @@ ALTER TABLE transactions ADD COLUMN IF NOT EXISTS is_edited BOOLEAN DEFAULT FALS
 ALTER TABLE transactions ADD COLUMN IF NOT EXISTS edited_by TEXT;
 ALTER TABLE transactions ADD COLUMN IF NOT EXISTS edited_at TIMESTAMP WITH TIME ZONE;
 ALTER TABLE transactions ADD COLUMN IF NOT EXISTS previous_data JSONB;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'transactions_transaction_id_key'
+    ) THEN
+        ALTER TABLE transactions ADD CONSTRAINT transactions_transaction_id_key UNIQUE (transaction_id);
+    END IF;
+END $$;
 
 ALTER TABLE students ADD COLUMN IF NOT EXISTS is_edited BOOLEAN DEFAULT FALSE;
 ALTER TABLE students ADD COLUMN IF NOT EXISTS edited_by TEXT;

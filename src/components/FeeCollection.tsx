@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Search, 
   CreditCard, 
@@ -15,7 +15,21 @@ import {
   RefreshCw,
   Edit3,
   Clock,
-  Eye
+  Eye,
+  Calendar,
+  XCircle,
+  Filter,
+  Plus,
+  Trash2,
+  Layers,
+  BarChart3,
+  FileSpreadsheet,
+  TrendingUp,
+  Sparkles,
+  ChevronUp,
+  Grid,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { safeFetchJson } from '../utils/api';
 import { motion, AnimatePresence } from 'motion/react';
@@ -24,6 +38,19 @@ import { cn } from '../lib/utils';
 import { format } from 'date-fns';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import * as XLSX from 'xlsx';
+import autoTable from 'jspdf-autotable';
+import { 
+  ResponsiveContainer, 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip as RechartsTooltip, 
+  Legend, 
+  Cell 
+} from 'recharts';
 
 import Receipt from './Receipt';
 
@@ -43,17 +70,83 @@ export default function FeeCollection() {
   
   const [recentTxs, setRecentTxs] = useState<any[]>([]);
   const [historySearch, setHistorySearch] = useState('');
+  const [historyStartDate, setHistoryStartDate] = useState('');
+  const [historyEndDate, setHistoryEndDate] = useState('');
+  const [datePreset, setDatePreset] = useState('all');
 
-  const [payment, setPayment] = useState({
+  const handlePresetChange = (preset: string) => {
+    setDatePreset(preset);
+    const today = new Date();
+    if (preset === 'all') {
+      setHistoryStartDate('');
+      setHistoryEndDate('');
+    } else if (preset === 'today') {
+      const todayStr = format(today, 'yyyy-MM-dd');
+      setHistoryStartDate(todayStr);
+      setHistoryEndDate(todayStr);
+    } else if (preset === 'yesterday') {
+      const y = new Date(today);
+      y.setDate(y.getDate() - 1);
+      const yStr = format(y, 'yyyy-MM-dd');
+      setHistoryStartDate(yStr);
+      setHistoryEndDate(yStr);
+    } else if (preset === 'this_week') {
+      const d = new Date(today);
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(d.setDate(diff));
+      setHistoryStartDate(format(monday, 'yyyy-MM-dd'));
+      setHistoryEndDate(format(today, 'yyyy-MM-dd'));
+    } else if (preset === 'this_month') {
+      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      setHistoryStartDate(format(firstDay, 'yyyy-MM-dd'));
+      setHistoryEndDate(format(today, 'yyyy-MM-dd'));
+    } else if (preset === 'last_month') {
+      const firstDayLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const lastDayLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+      setHistoryStartDate(format(firstDayLastMonth, 'yyyy-MM-dd'));
+      setHistoryEndDate(format(lastDayLastMonth, 'yyyy-MM-dd'));
+    }
+  };
+
+  interface PaymentEntry {
+    id: string;
+    amount: string;
+    payment_mode: string;
+    transaction_id: string;
+    transaction_date: string;
+    bank_account: string;
+  }
+
+  const createNewEntry = (): PaymentEntry => ({
+    id: Math.random().toString(36).substring(2, 9),
     amount: '',
     payment_mode: 'UPI Digital',
     transaction_id: '',
-    academic_term: '',
-    course: '',
-    branch: '',
     transaction_date: format(new Date(), 'yyyy-MM-dd'),
     bank_account: ''
   });
+
+  const [paymentEntries, setPaymentEntries] = useState<PaymentEntry[]>([createNewEntry()]);
+  const [academicTerm, setAcademicTerm] = useState('Sem I / 2026-27');
+  const [paymentCourse, setPaymentCourse] = useState('');
+  const [paymentBranch, setPaymentBranch] = useState('');
+
+  const addEntry = () => {
+    setPaymentEntries(prev => [...prev, createNewEntry()]);
+  };
+
+  const removeEntry = (id: string) => {
+    if (paymentEntries.length > 1) {
+      setPaymentEntries(prev => prev.filter(e => e.id !== id));
+    }
+  };
+
+  const updateEntry = (id: string, field: keyof PaymentEntry, value: string) => {
+    setPaymentEntries(prev => prev.map(e => e.id === id ? { ...e, [field]: value } : e));
+  };
+
+  const totalPaymentAmount = paymentEntries.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
 
   const receiptRef = useRef<HTMLDivElement>(null);
 
@@ -86,55 +179,100 @@ export default function FeeCollection() {
 
   const handleSavePayment = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!selectedStudent) return;
-    setError(null);
-
-    const payload: any = {
-      student_id: selectedStudent.id,
-      ...payment
-    };
-
-    const res = await fetch('/api/transactions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      setError(data.message || 'Failed to save payment. Please try again.');
+    if (!selectedStudent) {
+      setError('Please search and select a student first.');
       return;
     }
+    setError(null);
 
-    const savedTxnId = data.transaction_id || payment.transaction_id;
+    // Validation
+    const txIdSet = new Set<string>();
+    for (let i = 0; i < paymentEntries.length; i++) {
+      const entry = paymentEntries[i];
+      const amt = parseFloat(entry.amount);
+      if (isNaN(amt) || amt <= 0) {
+        setError(`Please enter a valid amount for Transaction #${i + 1}.`);
+        return;
+      }
+      if (entry.payment_mode !== 'Cash' && !entry.transaction_id.trim()) {
+        setError(`Transaction ID is mandatory for Transaction #${i + 1} (${entry.payment_mode}).`);
+        return;
+      }
+      const cleanId = entry.transaction_id.trim();
+      if (cleanId) {
+        if (txIdSet.has(cleanId.toLowerCase())) {
+          setError(`Duplicate Transaction ID! Transaction ID '${cleanId}' is entered multiple times in this submission.`);
+          return;
+        }
+        txIdSet.add(cleanId.toLowerCase());
+      }
+    }
 
-    setLastTx({
-      id: data.id || Math.floor(Math.random() * 1000),
-      ...payment,
-      transaction_id: savedTxnId,
-      amount: Number(payment.amount),
-      student_name: selectedStudent.name,
-      roll_no: selectedStudent.roll_no,
-      guardian_name: selectedStudent.guardian_name,
-      branch_name: payment.branch,
-      semester_name: payment.course,
-      created_at: new Date().toISOString()
-    } as Transaction);
+    const savedTxList: Transaction[] = [];
 
+    for (let i = 0; i < paymentEntries.length; i++) {
+      const entry = paymentEntries[i];
+      const payload: any = {
+        student_id: selectedStudent.id,
+        amount: parseFloat(entry.amount),
+        payment_mode: entry.payment_mode,
+        transaction_id: entry.transaction_id.trim() || `CASH_${Date.now()}_${i + 1}`,
+        academic_term: academicTerm || '2026-27',
+        course: paymentCourse || selectedStudent.semester_name || '',
+        branch: paymentBranch || selectedStudent.branch_name || '',
+        transaction_date: entry.transaction_date || format(new Date(), 'yyyy-MM-dd'),
+        bank_account: entry.bank_account
+      };
+
+      const res = await fetch('/api/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.message || `Failed to save Transaction #${i + 1}. Please try again.`);
+        return;
+      }
+
+      savedTxList.push({
+        id: data.id || Math.floor(Math.random() * 1000),
+        student_id: selectedStudent.id,
+        amount: parseFloat(entry.amount),
+        payment_mode: entry.payment_mode,
+        transaction_id: data.transaction_id || entry.transaction_id,
+        academic_term: academicTerm || '2026-27',
+        course: paymentCourse || selectedStudent.semester_name || '',
+        branch: paymentBranch || selectedStudent.branch_name || '',
+        transaction_date: entry.transaction_date,
+        bank_account: entry.bank_account,
+        student_name: selectedStudent.name,
+        roll_no: selectedStudent.roll_no,
+        guardian_name: selectedStudent.guardian_name,
+        branch_name: paymentBranch || selectedStudent.branch_name,
+        semester_name: paymentCourse || selectedStudent.semester_name,
+        created_at: new Date().toISOString()
+      } as Transaction);
+    }
+
+    // Build main combined transaction object for receipt
+    const primaryTx = savedTxList[0];
+    const combinedTx: Transaction = {
+      ...primaryTx,
+      amount: totalPaymentAmount,
+      payment_mode: savedTxList.map(t => t.payment_mode).join(', '),
+      transaction_id: savedTxList.map(t => t.transaction_id || 'N/A').join(', '),
+      splitTransactions: savedTxList
+    };
+
+    setLastTx(combinedTx);
     setIsSuccess(true);
     setIsModalOpen(false);
     loadRecentTransactions();
-    setPayment({ 
-      amount: '', 
-      payment_mode: 'UPI Digital', 
-      transaction_id: '', 
-      academic_term: '', 
-      course: '', 
-      branch: '',
-      transaction_date: format(new Date(), 'yyyy-MM-dd'),
-      bank_account: ''
-    });
+
+    // Reset entries form
+    setPaymentEntries([createNewEntry()]);
   };
 
   const shareWhatsApp = () => {
@@ -147,7 +285,16 @@ export default function FeeCollection() {
     const amountPaid = (lastTx.amount || 0).toFixed(2);
     const txDateStr = lastTx.created_at ? format(new Date(lastTx.created_at), 'dd-MM-yyyy HH:mm') : format(new Date(), 'dd-MM-yyyy HH:mm');
 
-    const msg = `🚩 *PAYMENT RECEIPT*\n*${orgName.toUpperCase()}*\n\nReceipt No: ${receiptNo}\nDate: ${txDateStr}\n\n*Student Details:*\nName: ${cleanVal(lastTx.student_name)}\nRoll No: ${cleanVal(lastTx.roll_no)}\nFather's Name: ${cleanVal(lastTx.guardian_name || 'N/A')}\nBranch: ${cleanVal(lastTx.branch_name || lastTx.branch || 'N/A')}\nSemester: ${cleanVal(lastTx.semester_name || lastTx.course || 'N/A')}\nSession: ${cleanVal(lastTx.academic_term || '2026-27')}\n\n*Payment Details:*\nAmount Paid: ₹${amountPaid}\nPayment Mode: ${cleanVal(lastTx.payment_mode)}\nTransaction ID: ${cleanVal(lastTx.transaction_id || 'N/A')}\n\nThank you for your payment!\nSoftware Developed by Digital Communique Private Limited`;
+    let paymentSection = `Amount Paid: ₹${amountPaid}\nPayment Mode: ${cleanVal(lastTx.payment_mode)}\nTransaction ID: ${cleanVal(lastTx.transaction_id || 'N/A')}`;
+
+    if (lastTx.splitTransactions && lastTx.splitTransactions.length > 1) {
+      const splitItems = lastTx.splitTransactions.map((st, i) => 
+        `  ${i + 1}. ₹${Number(st.amount).toFixed(2)} (${cleanVal(st.payment_mode)}) - Txn ID: ${cleanVal(st.transaction_id || 'N/A')}`
+      ).join('\n');
+      paymentSection = `*Payment Breakdown (${lastTx.splitTransactions.length} Transactions):*\n${splitItems}\n\n*Total Paid Amount: ₹${amountPaid}*`;
+    }
+
+    const msg = `🚩 *PAYMENT RECEIPT*\n*${orgName.toUpperCase()}*\n\nReceipt No: ${receiptNo}\nDate: ${txDateStr}\n\n*Student Details:*\nName: ${cleanVal(lastTx.student_name)}\nRoll No: ${cleanVal(lastTx.roll_no)}\nFather's Name: ${cleanVal(lastTx.guardian_name || 'N/A')}\nBranch: ${cleanVal(lastTx.branch_name || lastTx.branch || 'N/A')}\nSemester: ${cleanVal(lastTx.semester_name || lastTx.course || 'N/A')}\nSession: ${cleanVal(lastTx.academic_term || '2026-27')}\n\n*Payment Details:*\n${paymentSection}\n\nThank you for your payment!\nSoftware Developed by Digital Communique Private Limited`;
 
     const encodedMsg = encodeURIComponent(msg);
     const targetPhone = cleanPhone ? (cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone) : '';
@@ -242,11 +389,46 @@ export default function FeeCollection() {
     return matchesSearch && matchesBranch && matchesCourse;
   });
 
-  const formatTxDate = (dateStr?: string) => {
-    if (!dateStr) return 'N/A';
+  const formatTxDate = (dateVal?: any) => {
+    if (!dateVal) return 'N/A';
     try {
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return dateStr;
+      const str = dateVal.toString().trim();
+      if (!str) return 'N/A';
+
+      // YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss
+      const ymdMatch = str.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})(.*)/);
+      if (ymdMatch) {
+        const year = parseInt(ymdMatch[1], 10);
+        const month = parseInt(ymdMatch[2], 10);
+        const day = parseInt(ymdMatch[3], 10);
+        const rest = ymdMatch[4] ? ymdMatch[4].trim() : '';
+        let timeStr = '';
+        if (rest && (rest.includes('T') || rest.includes(':') || rest.includes(' '))) {
+          const d = new Date(str);
+          if (!isNaN(d.getTime())) {
+            let hours = d.getHours();
+            const minutes = d.getMinutes().toString().padStart(2, '0');
+            const seconds = d.getSeconds().toString().padStart(2, '0');
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            hours = hours % 12 || 12;
+            timeStr = ` ${hours}:${minutes}:${seconds} ${ampm}`;
+          }
+        }
+        return `${month}/${day}/${year}${timeStr}`;
+      }
+
+      // DD-MM-YYYY or DD/MM/YYYY or DD.MM.YYYY
+      const dmYMatch = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})(.*)/);
+      if (dmYMatch) {
+        const day = parseInt(dmYMatch[1], 10);
+        const month = parseInt(dmYMatch[2], 10);
+        const year = parseInt(dmYMatch[3], 10);
+        const rest = dmYMatch[4] ? dmYMatch[4].trim() : '';
+        return `${month}/${day}/${year}${rest ? ' ' + rest : ''}`;
+      }
+
+      const d = new Date(str);
+      if (isNaN(d.getTime())) return str;
       const month = d.getMonth() + 1;
       const date = d.getDate();
       const year = d.getFullYear();
@@ -254,11 +436,10 @@ export default function FeeCollection() {
       const minutes = d.getMinutes().toString().padStart(2, '0');
       const seconds = d.getSeconds().toString().padStart(2, '0');
       const ampm = hours >= 12 ? 'PM' : 'AM';
-      hours = hours % 12;
-      hours = hours ? hours : 12;
+      hours = hours % 12 || 12;
       return `${month}/${date}/${year} ${hours}:${minutes}:${seconds} ${ampm}`;
     } catch (e) {
-      return dateStr;
+      return String(dateVal);
     }
   };
 
@@ -351,15 +532,400 @@ export default function FeeCollection() {
     }
   };
 
+  const getTxDateString = (tx: any): string => {
+    const val = tx.transaction_date || tx.created_at;
+    if (!val) return '';
+    const str = val.toString().trim();
+
+    // 1. ISO or YYYY-MM-DD format
+    const ymdMatch = str.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/);
+    if (ymdMatch) {
+      const year = ymdMatch[1];
+      const month = ymdMatch[2].padStart(2, '0');
+      const day = ymdMatch[3].padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    // 2. DD-MM-YYYY or DD/MM/YYYY
+    const dmYMatch = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
+    if (dmYMatch) {
+      const day = dmYMatch[1].padStart(2, '0');
+      const month = dmYMatch[2].padStart(2, '0');
+      const year = dmYMatch[3];
+      return `${year}-${month}-${day}`;
+    }
+
+    // 3. Date fallback with UTC extraction
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      const year = d.getUTCFullYear();
+      const month = (d.getUTCMonth() + 1).toString().padStart(2, '0');
+      const day = d.getUTCDate().toString().padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+    return '';
+  };
+
   const filteredRecentTxs = (recentTxs || []).filter(tx => {
-    if (!historySearch.trim()) return true;
-    const q = historySearch.toLowerCase();
-    const name = (tx.student_name || tx.student?.name || '').toLowerCase();
-    const roll = (tx.roll_no || tx.student?.roll_no || '').toLowerCase();
-    const txId = (tx.transaction_id || '').toLowerCase();
-    const mode = (tx.payment_mode || '').toLowerCase();
-    return name.includes(q) || roll.includes(q) || txId.includes(q) || mode.includes(q);
+    if (historySearch.trim()) {
+      const q = historySearch.toLowerCase();
+      const name = (tx.student_name || tx.student?.name || '').toLowerCase();
+      const roll = (tx.roll_no || tx.student?.roll_no || '').toLowerCase();
+      const txId = (tx.transaction_id || '').toLowerCase();
+      const mode = (tx.payment_mode || '').toLowerCase();
+      const term = (tx.academic_term || '').toLowerCase();
+      const matchesText = name.includes(q) || roll.includes(q) || txId.includes(q) || mode.includes(q) || term.includes(q);
+      if (!matchesText) return false;
+    }
+
+    if (historyStartDate || historyEndDate) {
+      const txDateStr = getTxDateString(tx);
+      if (!txDateStr) return false;
+      if (historyStartDate && txDateStr < historyStartDate) return false;
+      if (historyEndDate && txDateStr > historyEndDate) return false;
+    }
+
+    return true;
   });
+
+  // Analytics & Export State
+  const [showAnalytics, setShowAnalytics] = useState(true);
+  const [chartMetric, setChartMetric] = useState<'daily' | 'mode'>('daily');
+  const [heatmapMonth, setHeatmapMonth] = useState<string>(format(new Date(), 'yyyy-MM'));
+
+  // Export Recent Transactions to Excel (.xlsx)
+  const exportRecentTransactionsExcel = () => {
+    if (!filteredRecentTxs || filteredRecentTxs.length === 0) {
+      alert("No transactions available to export.");
+      return;
+    }
+
+    const exportData = filteredRecentTxs.map((tx, idx) => ({
+      "S.No": idx + 1,
+      "Receipt No": `#DC-${1000 + tx.id}`,
+      "Date": formatTxDate(tx.transaction_date || tx.created_at),
+      "Student Name": cleanVal(tx.student_name || tx.student?.name || 'Student'),
+      "Roll No": cleanVal(tx.roll_no || tx.student?.roll_no || ''),
+      "Course/Semester": cleanVal(tx.semester_name || tx.course || tx.academic_term || ''),
+      "Branch": cleanVal(tx.branch_name || tx.branch || ''),
+      "Payment Mode": cleanVal(tx.payment_mode || 'UPI Digital'),
+      "Transaction ID": cleanVal(tx.transaction_id || 'N/A'),
+      "Academic Term": cleanVal(tx.academic_term || '2026-27'),
+      "Amount (₹)": Number(tx.amount || 0)
+    }));
+
+    const totalSum = filteredRecentTxs.reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+    exportData.push({
+      "S.No": "",
+      "Receipt No": "TOTAL SUMMARY",
+      "Date": "",
+      "Student Name": `Total ${filteredRecentTxs.length} Record(s)`,
+      "Roll No": "",
+      "Course/Semester": "",
+      "Branch": "",
+      "Payment Mode": "",
+      "Transaction ID": "",
+      "Academic Term": "",
+      "Amount (₹)": totalSum
+    } as any);
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Recent Transactions");
+    const fileName = `Recent_Transactions_Report_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+  };
+
+  // Export Recent Transactions to PDF Report
+  const exportRecentTransactionsPDF = () => {
+    if (!filteredRecentTxs || filteredRecentTxs.length === 0) {
+      alert("No transactions available to export.");
+      return;
+    }
+
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const orgName = settings?.org_name || 'DIGITAL COMMUNIQUE PRIVATE LIMITED';
+    const totalAmount = filteredRecentTxs.reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+
+    doc.setFontSize(16);
+    doc.setTextColor(15, 23, 42);
+    doc.text(orgName.toUpperCase(), 14, 15);
+
+    doc.setFontSize(11);
+    doc.setTextColor(51, 65, 85);
+    doc.text("RECENT TRANSACTIONS HISTORY REPORT", 14, 22);
+
+    doc.setFontSize(9);
+    doc.setTextColor(100, 116, 139);
+    const dateInfo = historyStartDate && historyEndDate 
+      ? `Period: ${historyStartDate} to ${historyEndDate}` 
+      : `Generated: ${format(new Date(), 'dd MMM yyyy, hh:mm a')}`;
+    doc.text(`${dateInfo} | Total Records: ${filteredRecentTxs.length} | Total Collection: Rs. ${totalAmount.toLocaleString('en-IN')}`, 14, 27);
+
+    const tableRows = filteredRecentTxs.map((tx, idx) => [
+      (idx + 1).toString(),
+      `#DC-${1000 + tx.id}`,
+      formatTxDate(tx.transaction_date || tx.created_at),
+      cleanVal(tx.student_name || tx.student?.name || 'Student'),
+      cleanVal(tx.roll_no || tx.student?.roll_no || ''),
+      cleanVal(tx.payment_mode || 'UPI Digital'),
+      cleanVal(tx.transaction_id || 'N/A'),
+      cleanVal(tx.academic_term || '2026-27'),
+      `Rs. ${Number(tx.amount || 0).toLocaleString('en-IN')}`
+    ]);
+
+    autoTable(doc, {
+      startY: 32,
+      head: [['#', 'Receipt No', 'Date & Time', 'Student Name', 'Roll No', 'Mode', 'Transaction ID', 'Term', 'Amount']],
+      body: tableRows,
+      theme: 'grid',
+      headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
+      columnStyles: {
+        0: { cellWidth: 10 },
+        1: { cellWidth: 25 },
+        2: { cellWidth: 35 },
+        3: { cellWidth: 50 },
+        4: { cellWidth: 30 },
+        5: { cellWidth: 30 },
+        6: { cellWidth: 40 },
+        7: { cellWidth: 25 },
+        8: { cellWidth: 30, halign: 'right' }
+      },
+      foot: [['', '', '', 'TOTAL SUMMARY', '', '', '', `${filteredRecentTxs.length} Txns`, `Rs. ${totalAmount.toLocaleString('en-IN')}`]],
+      footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontSize: 9, fontStyle: 'bold' }
+    });
+
+    doc.save(`Recent_Transactions_Report_${format(new Date(), 'yyyyMMdd_HHmm')}.pdf`);
+  };
+
+  // Print Recent Transactions Summary Report
+  const printRecentTransactionsReport = () => {
+    if (!filteredRecentTxs || filteredRecentTxs.length === 0) {
+      alert("No transactions available to print.");
+      return;
+    }
+    const orgName = settings?.org_name || 'DIGITAL COMMUNIQUE PRIVATE LIMITED';
+    const totalAmount = filteredRecentTxs.reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+
+    const modeTotals: Record<string, number> = {};
+    filteredRecentTxs.forEach(tx => {
+      const mode = cleanVal(tx.payment_mode) || 'UPI Digital';
+      modeTotals[mode] = (modeTotals[mode] || 0) + Number(tx.amount || 0);
+    });
+
+    const printWin = window.open('', '_blank');
+    if (printWin) {
+      printWin.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Recent Transactions Report</title>
+            <script src="https://cdn.tailwindcss.com"></script>
+            <style>
+              @media print {
+                body { margin: 0; padding: 20px; }
+              }
+            </style>
+          </head>
+          <body class="bg-white text-slate-900 p-8 font-sans">
+            <div class="flex justify-between items-start border-b pb-4 mb-6">
+              <div>
+                <h1 class="text-2xl font-black uppercase text-slate-900">${orgName}</h1>
+                <h2 class="text-base font-bold text-slate-600 mt-1">RECENT TRANSACTION HISTORY REPORT</h2>
+                <p class="text-xs text-slate-500 mt-1">
+                  Generated: ${format(new Date(), 'dd MMM yyyy, hh:mm a')} 
+                  ${historyStartDate && historyEndDate ? ` | Filter Range: ${historyStartDate} to ${historyEndDate}` : ''}
+                </p>
+              </div>
+              <div class="text-right">
+                <span class="inline-block bg-emerald-100 text-emerald-800 text-sm font-black px-4 py-2 rounded-xl">
+                  Total Collection: ₹${totalAmount.toLocaleString('en-IN')}
+                </span>
+              </div>
+            </div>
+
+            <!-- Mode Breakdown -->
+            <div class="grid grid-cols-4 gap-4 mb-6">
+              <div class="bg-slate-50 border border-slate-200 p-3 rounded-xl">
+                <p class="text-[10px] font-bold text-slate-400 uppercase">Total Records</p>
+                <p class="text-lg font-black text-slate-800">${filteredRecentTxs.length}</p>
+              </div>
+              ${Object.entries(modeTotals).map(([mode, amt]) => `
+                <div class="bg-slate-50 border border-slate-200 p-3 rounded-xl">
+                  <p class="text-[10px] font-bold text-slate-400 uppercase">${mode}</p>
+                  <p class="text-lg font-black text-emerald-700">₹${amt.toLocaleString('en-IN')}</p>
+                </div>
+              `).join('')}
+            </div>
+
+            <!-- Data Table -->
+            <table class="w-full text-left border-collapse text-xs mb-8">
+              <thead>
+                <tr class="bg-slate-900 text-white font-bold">
+                  <th class="p-2 border">#</th>
+                  <th class="p-2 border">Receipt No</th>
+                  <th class="p-2 border">Date & Time</th>
+                  <th class="p-2 border">Student Name</th>
+                  <th class="p-2 border">Roll No</th>
+                  <th class="p-2 border">Mode</th>
+                  <th class="p-2 border">Txn ID</th>
+                  <th class="p-2 border">Term</th>
+                  <th class="p-2 border text-right">Amount (₹)</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-200">
+                ${filteredRecentTxs.map((tx, idx) => `
+                  <tr class="hover:bg-slate-50">
+                    <td class="p-2 border font-bold text-slate-500">${idx + 1}</td>
+                    <td class="p-2 border font-mono font-bold text-slate-900">#DC-${1000 + tx.id}</td>
+                    <td class="p-2 border text-slate-600">${formatTxDate(tx.transaction_date || tx.created_at)}</td>
+                    <td class="p-2 border font-bold text-slate-800">${cleanVal(tx.student_name || tx.student?.name || 'Student')}</td>
+                    <td class="p-2 border font-mono text-slate-600">${cleanVal(tx.roll_no || tx.student?.roll_no || '')}</td>
+                    <td class="p-2 border font-semibold text-slate-700">${cleanVal(tx.payment_mode || 'UPI Digital')}</td>
+                    <td class="p-2 border font-mono text-slate-600">${cleanVal(tx.transaction_id || 'N/A')}</td>
+                    <td class="p-2 border text-slate-600">${cleanVal(tx.academic_term || '2026-27')}</td>
+                    <td class="p-2 border text-right font-bold text-emerald-700">₹${Number(tx.amount || 0).toLocaleString('en-IN')}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+              <tfoot>
+                <tr class="bg-slate-100 font-black text-slate-900 text-sm">
+                  <td colspan="8" class="p-3 border text-right uppercase">Total Amount Collected</td>
+                  <td class="p-3 border text-right text-emerald-700">₹${totalAmount.toLocaleString('en-IN')}</td>
+                </tr>
+              </tfoot>
+            </table>
+
+            <div class="flex justify-between items-end pt-8 text-xs text-slate-500">
+              <div>
+                <p class="font-bold text-slate-700">Digital Communique Fee System</p>
+                <p>System Generated Report</p>
+              </div>
+              <div class="text-center border-t border-slate-400 pt-2 min-w-[150px]">
+                <p class="font-bold text-slate-800">Authorized Signature</p>
+              </div>
+            </div>
+
+            <script>
+              setTimeout(() => {
+                window.print();
+                window.close();
+              }, 600);
+            </script>
+          </body>
+        </html>
+      `);
+      printWin.document.close();
+    }
+  };
+
+  // Chart Computations
+  const dailyChartData = useMemo(() => {
+    const map: Record<string, { date: string; displayDate: string; amount: number; count: number }> = {};
+    (filteredRecentTxs || []).forEach(tx => {
+      const dStr = getTxDateString(tx);
+      if (!dStr) return;
+      if (!map[dStr]) {
+        let disp = dStr;
+        try {
+          const parts = dStr.split('-');
+          if (parts.length === 3) {
+            disp = `${parts[2]}/${parts[1]}`;
+          }
+        } catch (e) {}
+        map[dStr] = { date: dStr, displayDate: disp, amount: 0, count: 0 };
+      }
+      map[dStr].amount += Number(tx.amount || 0);
+      map[dStr].count += 1;
+    });
+
+    const keys = Object.keys(map).sort();
+    return keys.map(k => map[k]);
+  }, [filteredRecentTxs]);
+
+  const modeChartData = useMemo(() => {
+    const map: Record<string, { mode: string; amount: number; count: number }> = {
+      'UPI Digital': { mode: 'UPI Digital', amount: 0, count: 0 },
+      'Cash': { mode: 'Cash', amount: 0, count: 0 },
+      'Bank Transfer': { mode: 'Bank Transfer', amount: 0, count: 0 },
+      'Cheque': { mode: 'Cheque', amount: 0, count: 0 }
+    };
+    (filteredRecentTxs || []).forEach(tx => {
+      const m = cleanVal(tx.payment_mode) || 'UPI Digital';
+      if (!map[m]) {
+        map[m] = { mode: m, amount: 0, count: 0 };
+      }
+      map[m].amount += Number(tx.amount || 0);
+      map[m].count += 1;
+    });
+    return Object.values(map);
+  }, [filteredRecentTxs]);
+
+  // Heatmap Computations
+  const heatmapGridData = useMemo(() => {
+    const [yearStr, monthStr] = (heatmapMonth || format(new Date(), 'yyyy-MM')).split('-');
+    const year = parseInt(yearStr, 10) || new Date().getFullYear();
+    const monthIdx = (parseInt(monthStr, 10) || (new Date().getMonth() + 1)) - 1;
+
+    const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
+    const firstDayOfWeek = new Date(year, monthIdx, 1).getDay(); // 0 = Sun
+
+    const txMap: Record<string, { amount: number; count: number }> = {};
+    (recentTxs || []).forEach(tx => {
+      const dStr = getTxDateString(tx);
+      if (!dStr) return;
+      if (!txMap[dStr]) txMap[dStr] = { amount: 0, count: 0 };
+      txMap[dStr].amount += Number(tx.amount || 0);
+      txMap[dStr].count += 1;
+    });
+
+    const cells = [];
+    for (let i = 0; i < firstDayOfWeek; i++) {
+      cells.push({ empty: true, key: `empty-${i}` });
+    }
+
+    let monthTotal = 0;
+    let monthTxCount = 0;
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dayPadded = d.toString().padStart(2, '0');
+      const monthPadded = (monthIdx + 1).toString().padStart(2, '0');
+      const dateStr = `${year}-${monthPadded}-${dayPadded}`;
+      const data = txMap[dateStr] || { amount: 0, count: 0 };
+
+      monthTotal += data.amount;
+      monthTxCount += data.count;
+
+      let intensity = 0;
+      if (data.amount > 0) {
+        if (data.amount <= 10000) intensity = 1;
+        else if (data.amount <= 30000) intensity = 2;
+        else if (data.amount <= 75000) intensity = 3;
+        else intensity = 4;
+      }
+
+      cells.push({
+        empty: false,
+        dayNumber: d,
+        dateStr,
+        amount: data.amount,
+        count: data.count,
+        intensity,
+        key: dateStr
+      });
+    }
+
+    const monthName = format(new Date(year, monthIdx, 1), 'MMMM yyyy');
+
+    return { cells, year, monthIdx, monthName, monthTotal, monthTxCount };
+  }, [recentTxs, heatmapMonth]);
+
+  const changeHeatmapMonth = (delta: number) => {
+    const [y, m] = heatmapMonth.split('-').map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    setHeatmapMonth(format(d, 'yyyy-MM'));
+  };
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
@@ -417,11 +983,11 @@ export default function FeeCollection() {
                           onClick={() => {
                             setSelectedStudent(s);
                             setSearch(s.name);
-                            setPayment({
-                              ...payment,
-                              course: s.semester_name || '',
-                              branch: s.branch_name || ''
-                            });
+                            setPaymentCourse(s.semester_name || '');
+                            setPaymentBranch(s.branch_name || '');
+                            if (s.semester_name) {
+                              setAcademicTerm(s.semester_name);
+                            }
                           }}
                           className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors text-left"
                         >
@@ -474,98 +1040,177 @@ export default function FeeCollection() {
               </motion.div>
             )}
 
-            <form onSubmit={handleSavePayment} className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Course</label>
-                <input 
-                  readOnly
-                  type="text"
-                  value={payment.course}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-100 bg-slate-50 text-slate-500 font-medium outline-none cursor-not-allowed"
-                  placeholder="Course Name"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Branch</label>
-                <input 
-                  readOnly
-                  type="text"
-                  value={payment.branch}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-100 bg-slate-50 text-slate-500 font-medium outline-none cursor-not-allowed"
-                  placeholder="Branch Name"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Amount (₹)</label>
-                <input 
-                  required
-                  type="number"
-                  value={payment.amount}
-                  onChange={e => setPayment({...payment, amount: e.target.value})}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all text-lg font-bold"
-                  placeholder="0.00"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Academic Term</label>
-                <input 
-                  required
-                  type="text"
-                  value={payment.academic_term}
-                  onChange={e => setPayment({...payment, academic_term: e.target.value})}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                  placeholder="e.g. Sem I / 2024"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Payment Mode</label>
-                <select 
-                  value={payment.payment_mode}
-                  onChange={e => setPayment({...payment, payment_mode: e.target.value})}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all bg-white"
-                >
-                  <option>UPI Digital</option>
-                  <option>Cash</option>
-                  <option>Bank Transfer</option>
-                  <option>Cheque</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Transaction ID</label>
-                <input 
-                  required={payment.payment_mode !== 'Cash'}
-                  type="text"
-                  value={payment.transaction_id}
-                  onChange={e => setPayment({...payment, transaction_id: e.target.value})}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                  placeholder={payment.payment_mode === 'Cash' ? 'Optional for Cash' : 'Mandatory for Digital'}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Transaction Date</label>
-                <input 
-                  required
-                  type="date"
-                  value={payment.transaction_date}
-                  onChange={e => setPayment({...payment, transaction_date: e.target.value})}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Bank Account Number</label>
-                <input 
-                  type="text"
-                  value={payment.bank_account}
-                  onChange={e => setPayment({...payment, bank_account: e.target.value})}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                  placeholder="e.g. XXXX XXXX 1234"
-                />
+            <form onSubmit={handleSavePayment} className="space-y-6">
+              {/* Course, Branch & Academic Term */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pb-4 border-b border-slate-100">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Course</label>
+                  <input 
+                    readOnly
+                    type="text"
+                    value={paymentCourse}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-100 bg-slate-50 text-slate-600 font-medium outline-none cursor-not-allowed text-sm"
+                    placeholder="Course Name"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Branch</label>
+                  <input 
+                    readOnly
+                    type="text"
+                    value={paymentBranch}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-100 bg-slate-50 text-slate-600 font-medium outline-none cursor-not-allowed text-sm"
+                    placeholder="Branch Name"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Academic Term / Session *</label>
+                  <input 
+                    required
+                    type="text"
+                    value={academicTerm}
+                    onChange={e => setAcademicTerm(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none text-sm font-medium"
+                    placeholder="e.g. Sem I / 2026-27"
+                  />
+                </div>
               </div>
 
-              <div className="md:col-span-2 pt-6">
+              {/* Multi-Transaction Entries Section */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                      <Layers size={18} className="text-emerald-600" />
+                      Transaction Entries / Split Payment ({paymentEntries.length})
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Record single or multiple transaction entries for different payment modes or dates.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addEntry}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl font-bold text-xs hover:bg-emerald-100 transition-all shadow-sm"
+                  >
+                    <Plus size={16} />
+                    Add Transaction Entry
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {paymentEntries.map((entry, index) => (
+                    <div 
+                      key={entry.id} 
+                      className="p-5 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-4 transition-all relative hover:border-slate-300"
+                    >
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-200/60">
+                        <div className="flex items-center gap-2">
+                          <span className="w-6 h-6 rounded-full bg-slate-900 text-white font-black text-xs flex items-center justify-center">
+                            {index + 1}
+                          </span>
+                          <span className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
+                            Transaction #{index + 1}
+                          </span>
+                        </div>
+                        {paymentEntries.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeEntry(entry.id)}
+                            className="text-slate-400 hover:text-red-600 p-1 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-1 text-xs font-semibold"
+                          >
+                            <Trash2 size={15} />
+                            <span>Remove</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Amount (₹) *</label>
+                          <input 
+                            required
+                            type="number"
+                            step="any"
+                            value={entry.amount}
+                            onChange={e => updateEntry(entry.id, 'amount', e.target.value)}
+                            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none text-base font-bold bg-white"
+                            placeholder="0.00"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Payment Mode *</label>
+                          <select 
+                            value={entry.payment_mode}
+                            onChange={e => updateEntry(entry.id, 'payment_mode', e.target.value)}
+                            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none bg-white text-sm font-medium"
+                          >
+                            <option value="UPI Digital">UPI Digital</option>
+                            <option value="Cash">Cash</option>
+                            <option value="Bank Transfer">Bank Transfer</option>
+                            <option value="Cheque">Cheque</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                            Transaction ID {entry.payment_mode !== 'Cash' && '*'}
+                          </label>
+                          <input 
+                            required={entry.payment_mode !== 'Cash'}
+                            type="text"
+                            value={entry.transaction_id}
+                            onChange={e => updateEntry(entry.id, 'transaction_id', e.target.value)}
+                            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none bg-white text-sm"
+                            placeholder={entry.payment_mode === 'Cash' ? 'Optional for Cash' : 'Mandatory for Digital'}
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Transaction Date *</label>
+                          <input 
+                            required
+                            type="date"
+                            value={entry.transaction_date}
+                            onChange={e => updateEntry(entry.id, 'transaction_date', e.target.value)}
+                            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none bg-white text-sm font-medium"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5 sm:col-span-2">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Bank Account Number (Optional)</label>
+                          <input 
+                            type="text"
+                            value={entry.bank_account}
+                            onChange={e => updateEntry(entry.id, 'bank_account', e.target.value)}
+                            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none bg-white text-sm"
+                            placeholder="e.g. XXXX XXXX 1234"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Total Summary & Submit */}
+              <div className="pt-4 border-t border-slate-200 space-y-4">
+                <div className="p-4 bg-slate-900 text-white rounded-2xl flex items-center justify-between shadow-md">
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Total Amount to Record</p>
+                    <p className="text-2xl font-black text-emerald-400">₹ {totalPaymentAmount.toFixed(2)}</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="px-3 py-1 bg-slate-800 text-slate-300 rounded-full text-xs font-bold border border-slate-700">
+                      {paymentEntries.length} {paymentEntries.length === 1 ? 'Transaction' : 'Transactions / Splits'}
+                    </span>
+                  </div>
+                </div>
+
                 <button 
                   type="submit"
-                  disabled={!selectedStudent}
+                  disabled={!selectedStudent || totalPaymentAmount <= 0}
                   className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-bold text-lg hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   <CreditCard size={20} />
@@ -630,7 +1275,7 @@ export default function FeeCollection() {
       )}
 
       {/* Recent Transaction History */}
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden p-6 md:p-8 space-y-6 print:hidden">
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden p-6 md:p-8 space-y-5 print:hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2.5">
@@ -639,30 +1284,369 @@ export default function FeeCollection() {
               </div>
               <h3 className="text-xl font-bold text-slate-800">Recent Transaction History</h3>
             </div>
-            <p className="text-slate-500 text-xs mt-1">Live overview of recent fee collections recorded in the system</p>
+            <p className="text-slate-500 text-xs mt-1">Live overview, analytical visual charts, and report generation</p>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="relative min-w-[220px] flex-1 md:flex-initial">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-              <input 
-                type="text"
-                placeholder="Search transactions..."
-                value={historySearch}
-                onChange={e => setHistorySearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-200 text-xs outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white transition-all"
-              />
-            </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Toggle Analytics Card */}
+            <button 
+              onClick={() => setShowAnalytics(!showAnalytics)}
+              className={cn(
+                "px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border shadow-sm",
+                showAnalytics 
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200" 
+                  : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+              )}
+            >
+              <BarChart3 size={15} />
+              <span>{showAnalytics ? 'Hide Visual Analytics' : 'Show Charts & Heatmap'}</span>
+            </button>
+
+            {/* Export Excel Report */}
+            <button 
+              onClick={exportRecentTransactionsExcel}
+              className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+              title="Download Excel Report"
+            >
+              <FileSpreadsheet size={15} />
+              <span>Excel Report</span>
+            </button>
+
+            {/* Export PDF Report */}
+            <button 
+              onClick={exportRecentTransactionsPDF}
+              className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+              title="Download PDF Report"
+            >
+              <FileDown size={15} />
+              <span>PDF Report</span>
+            </button>
+
+            {/* Print Report */}
+            <button 
+              onClick={printRecentTransactionsReport}
+              className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+              title="Print Summary Report"
+            >
+              <Printer size={15} />
+              <span>Print Report</span>
+            </button>
+
+            {/* Refresh */}
             <button 
               onClick={loadRecentTransactions}
-              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0"
+              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0"
               title="Refresh transaction list"
             >
               <RefreshCw size={14} />
-              Refresh
             </button>
           </div>
         </div>
+
+        {/* Visual Analytics Panel (Bar Chart & Daily Density Heat Map) */}
+        <AnimatePresence>
+          {showAnalytics && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden space-y-4 pt-1"
+            >
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                {/* Bar Chart Panel (7 cols) */}
+                <div className="lg:col-span-7 bg-slate-50/80 border border-slate-200/80 rounded-2xl p-5 space-y-4 flex flex-col justify-between">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 bg-emerald-100 text-emerald-800 rounded-lg">
+                        <TrendingUp size={16} />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-800">Fee Collection Bar Chart</h4>
+                        <p className="text-[11px] text-slate-500">Visual breakdown of transactions</p>
+                      </div>
+                    </div>
+
+                    {/* Metric Toggle */}
+                    <div className="flex bg-white p-1 rounded-xl border border-slate-200 text-xs font-bold">
+                      <button
+                        onClick={() => setChartMetric('daily')}
+                        className={cn(
+                          "px-2.5 py-1 rounded-lg transition-all text-[11px]",
+                          chartMetric === 'daily'
+                            ? "bg-slate-900 text-white shadow-sm"
+                            : "text-slate-600 hover:text-slate-900"
+                        )}
+                      >
+                        Daily Collections
+                      </button>
+                      <button
+                        onClick={() => setChartMetric('mode')}
+                        className={cn(
+                          "px-2.5 py-1 rounded-lg transition-all text-[11px]",
+                          chartMetric === 'mode'
+                            ? "bg-slate-900 text-white shadow-sm"
+                            : "text-slate-600 hover:text-slate-900"
+                        )}
+                      >
+                        Mode Breakdown
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Recharts Bar Chart Container */}
+                  <div className="h-56 w-full pt-2">
+                    {chartMetric === 'daily' ? (
+                      dailyChartData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={dailyChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                            <XAxis dataKey="displayDate" tick={{ fontSize: 11, fill: '#64748B' }} />
+                            <YAxis tick={{ fontSize: 11, fill: '#64748B' }} tickFormatter={(val) => `₹${val >= 1000 ? `${(val/1000).toFixed(0)}k` : val}`} />
+                            <RechartsTooltip 
+                              formatter={(value: any) => [`₹ ${Number(value).toLocaleString('en-IN')}`, 'Collection Amount']}
+                              labelFormatter={(label) => `Date: ${label}`}
+                              contentStyle={{ backgroundColor: '#0F172A', color: '#fff', borderRadius: '12px', border: 'none', fontSize: '12px' }}
+                            />
+                            <Bar dataKey="amount" fill="#059669" radius={[6, 6, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="h-full flex items-center justify-center text-xs text-slate-400 font-medium">
+                          No transaction data in selected range
+                        </div>
+                      )
+                    ) : (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={modeChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                          <XAxis dataKey="mode" tick={{ fontSize: 11, fill: '#64748B' }} />
+                          <YAxis tick={{ fontSize: 11, fill: '#64748B' }} tickFormatter={(val) => `₹${val >= 1000 ? `${(val/1000).toFixed(0)}k` : val}`} />
+                          <RechartsTooltip 
+                            formatter={(value: any, name: any, item: any) => [`₹ ${Number(value).toLocaleString('en-IN')} (${item.payload.count} txns)`, 'Total Collected']}
+                            contentStyle={{ backgroundColor: '#0F172A', color: '#fff', borderRadius: '12px', border: 'none', fontSize: '12px' }}
+                          />
+                          <Bar dataKey="amount" radius={[6, 6, 0, 0]}>
+                            {modeChartData.map((entry, index) => {
+                              const colors = ['#2563EB', '#059669', '#7C3AED', '#D97706'];
+                              return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
+                            })}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    )}
+                  </div>
+                </div>
+
+                {/* Heat Map Panel (5 cols) */}
+                <div className="lg:col-span-5 bg-slate-50/80 border border-slate-200/80 rounded-2xl p-5 space-y-3 flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 bg-blue-100 text-blue-800 rounded-lg">
+                        <Grid size={16} />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-800">Collection Heatmap</h4>
+                        <p className="text-[11px] text-slate-500">Daily density & activity intensity</p>
+                      </div>
+                    </div>
+
+                    {/* Month Controls */}
+                    <div className="flex items-center gap-1">
+                      <button 
+                        onClick={() => changeHeatmapMonth(-1)}
+                        className="p-1 hover:bg-slate-200 rounded-lg text-slate-600 transition-colors"
+                        title="Previous Month"
+                      >
+                        <ChevronLeft size={16} />
+                      </button>
+                      <span className="text-xs font-extrabold text-slate-800 px-1">
+                        {heatmapGridData.monthName}
+                      </span>
+                      <button 
+                        onClick={() => changeHeatmapMonth(1)}
+                        className="p-1 hover:bg-slate-200 rounded-lg text-slate-600 transition-colors"
+                        title="Next Month"
+                      >
+                        <ChevronRight size={16} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Calendar Heatmap Grid */}
+                  <div className="space-y-1.5 pt-1">
+                    {/* Day Headers */}
+                    <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-slate-400">
+                      <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+                    </div>
+
+                    {/* Days Grid */}
+                    <div className="grid grid-cols-7 gap-1.5">
+                      {heatmapGridData.cells.map((cell) => {
+                        if (cell.empty) {
+                          return <div key={cell.key} className="h-8 rounded-lg bg-transparent" />;
+                        }
+
+                        let bgClass = "bg-white border-slate-200 text-slate-600 hover:border-slate-400";
+                        if (cell.intensity === 1) bgClass = "bg-emerald-100 border-emerald-300 text-emerald-900 font-bold";
+                        else if (cell.intensity === 2) bgClass = "bg-emerald-300 border-emerald-400 text-emerald-950 font-black";
+                        else if (cell.intensity === 3) bgClass = "bg-emerald-500 border-emerald-600 text-white font-black";
+                        else if (cell.intensity === 4) bgClass = "bg-emerald-700 border-emerald-800 text-white font-black shadow-sm";
+
+                        const isSelectedDate = historyStartDate === cell.dateStr && historyEndDate === cell.dateStr;
+
+                        return (
+                          <button
+                            key={cell.key}
+                            onClick={() => {
+                              setHistoryStartDate(cell.dateStr);
+                              setHistoryEndDate(cell.dateStr);
+                              setDatePreset('custom');
+                            }}
+                            title={`${cell.dateStr}: ₹${cell.amount.toLocaleString('en-IN')} (${cell.count} txns)`}
+                            className={cn(
+                              "h-8 rounded-lg border text-[11px] flex items-center justify-center transition-all relative group cursor-pointer",
+                              bgClass,
+                              isSelectedDate && "ring-2 ring-blue-600 ring-offset-1 scale-105 z-10"
+                            )}
+                          >
+                            <span>{cell.dayNumber}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Heatmap Legend */}
+                  <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 pt-2 border-t border-slate-200/60">
+                    <span className="font-semibold text-slate-600">Legend:</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="flex items-center gap-1">
+                        <span className="w-2.5 h-2.5 rounded bg-white border border-slate-200" />
+                        <span>₹0</span>
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="w-2.5 h-2.5 rounded bg-emerald-100 border border-emerald-300" />
+                        <span>≤10k</span>
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="w-2.5 h-2.5 rounded bg-emerald-300 border border-emerald-400" />
+                        <span>≤30k</span>
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="w-2.5 h-2.5 rounded bg-emerald-500" />
+                        <span>≤75k</span>
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="w-2.5 h-2.5 rounded bg-emerald-700" />
+                        <span>&gt;75k</span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Date Filter & Search Controls */}
+        <div className="p-3.5 bg-slate-50/80 border border-slate-200/80 rounded-2xl flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          {/* Left: Date Preset & Custom Range */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 mr-1">
+              <Calendar size={15} className="text-blue-600" />
+              <span>Date Filter:</span>
+            </div>
+
+            {/* Quick Presets */}
+            <select
+              value={datePreset}
+              onChange={(e) => handlePresetChange(e.target.value)}
+              className="px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 bg-white text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 shadow-sm cursor-pointer"
+            >
+              <option value="all">All Dates</option>
+              <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
+              <option value="this_week">This Week</option>
+              <option value="this_month">This Month</option>
+              <option value="last_month">Last Month</option>
+              <option value="custom">Custom Range</option>
+            </select>
+
+            {/* Date Inputs */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl px-2.5 py-1 shadow-sm">
+                <span className="text-[10px] font-bold text-slate-400 uppercase">From</span>
+                <input
+                  type="date"
+                  value={historyStartDate}
+                  onChange={(e) => {
+                    setHistoryStartDate(e.target.value);
+                    setDatePreset('custom');
+                  }}
+                  className="text-xs text-slate-700 font-medium bg-transparent outline-none cursor-pointer"
+                />
+              </div>
+
+              <span className="text-xs text-slate-400 font-bold">-</span>
+
+              <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl px-2.5 py-1 shadow-sm">
+                <span className="text-[10px] font-bold text-slate-400 uppercase">To</span>
+                <input
+                  type="date"
+                  value={historyEndDate}
+                  onChange={(e) => {
+                    setHistoryEndDate(e.target.value);
+                    setDatePreset('custom');
+                  }}
+                  className="text-xs text-slate-700 font-medium bg-transparent outline-none cursor-pointer"
+                />
+              </div>
+            </div>
+
+            {(historyStartDate || historyEndDate || datePreset !== 'all') && (
+              <button
+                onClick={() => handlePresetChange('all')}
+                className="px-2.5 py-1 text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors flex items-center gap-1"
+                title="Clear date filter"
+              >
+                <XCircle size={14} />
+                Clear Date
+              </button>
+            )}
+          </div>
+
+          {/* Right: Search Input */}
+          <div className="relative min-w-[220px] flex-1 lg:flex-initial">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+            <input 
+              type="text"
+              placeholder="Search transactions..."
+              value={historySearch}
+              onChange={e => setHistorySearch(e.target.value)}
+              className="w-full pl-8 pr-4 py-1.5 rounded-xl border border-slate-200 text-xs outline-none focus:ring-2 focus:ring-blue-500 bg-white transition-all shadow-sm"
+            />
+          </div>
+        </div>
+
+        {/* Filter summary status badge if any filter active */}
+        {(historyStartDate || historyEndDate || historySearch) && (
+          <div className="flex items-center justify-between text-xs text-slate-600 bg-blue-50/60 px-3.5 py-2 rounded-xl border border-blue-100">
+            <span className="font-medium">
+              Showing <strong className="font-bold text-blue-900">{filteredRecentTxs.length}</strong> transaction{filteredRecentTxs.length !== 1 ? 's' : ''}
+              {historyStartDate && historyEndDate ? ` from ${historyStartDate} to ${historyEndDate}` : (historyStartDate ? ` from ${historyStartDate}` : (historyEndDate ? ` up to ${historyEndDate}` : ''))}
+              {historySearch ? ` matching "${historySearch}"` : ''}
+            </span>
+            <button
+              onClick={() => {
+                handlePresetChange('all');
+                setHistorySearch('');
+              }}
+              className="text-blue-700 hover:text-blue-900 underline font-bold text-[11px]"
+            >
+              Reset Filters
+            </button>
+          </div>
+        )}
 
         <div className="overflow-x-auto border border-slate-200 rounded-2xl">
           <table className="w-full text-left border-collapse">
@@ -678,7 +1662,7 @@ export default function FeeCollection() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
-              {filteredRecentTxs.slice(0, 15).map((tx) => (
+              {filteredRecentTxs.slice(0, (historyStartDate || historyEndDate || historySearch) ? 100 : 25).map((tx) => (
                 <tr key={tx.id} className="hover:bg-slate-50 transition-colors">
                   <td className="py-3 px-4 font-mono font-bold text-slate-900">
                     <div>#DC-{1000 + tx.id}</div>
@@ -689,7 +1673,7 @@ export default function FeeCollection() {
                     )}
                   </td>
                   <td className="py-3 px-4 text-slate-600 font-medium">
-                    {formatTxDate(tx.created_at || tx.transaction_date)}
+                    {formatTxDate(tx.transaction_date || tx.created_at)}
                   </td>
                   <td className="py-3 px-4">
                     <p className="font-bold text-slate-800">{cleanVal(tx.student_name || tx.student?.name || 'Student')}</p>

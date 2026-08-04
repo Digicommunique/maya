@@ -171,14 +171,16 @@ export default function StudentDirectory() {
       safeFetchJson('/api/settings', undefined, null)
     ]).then(([studentsData, plansData, settingsData]) => {
       const rawStudents = Array.isArray(studentsData) ? studentsData : [];
-      // Sort students so latest added student appears at the top
+      // Sort students so latest enrolled/added student appears at the top
       rawStudents.sort((a: any, b: any) => {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        if (timeA && timeB && !isNaN(timeA) && !isNaN(timeB) && timeA !== timeB) {
+          return timeB - timeA;
+        }
         const idA = Number(a.id) || 0;
         const idB = Number(b.id) || 0;
-        if (idA !== idB) return idB - idA;
-        const timeA = new Date(a.created_at || 0).getTime();
-        const timeB = new Date(b.created_at || 0).getTime();
-        return timeB - timeA;
+        return idB - idA;
       });
       setStudents(rawStudents);
       setPlans(Array.isArray(plansData) ? plansData : []);
@@ -321,7 +323,7 @@ export default function StudentDirectory() {
 
   const filteredStudents = useMemo(() => {
     const searchLower = search.toLowerCase().trim();
-    return (students || []).filter(s => {
+    const result = (students || []).filter(s => {
       const matchesSearch = !searchLower || 
         (s.name || '').toLowerCase().includes(searchLower) || 
         (s.roll_no || '').toLowerCase().includes(searchLower) ||
@@ -332,6 +334,17 @@ export default function StudentDirectory() {
       const matchesSemester = filters.semester === 'all' || Number(s.semester_id) === Number(filters.semester);
 
       return matchesSearch && matchesPlan && matchesBranch && matchesSemester;
+    });
+
+    return result.sort((a: any, b: any) => {
+      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      if (timeA && timeB && !isNaN(timeA) && !isNaN(timeB) && timeA !== timeB) {
+        return timeB - timeA;
+      }
+      const idA = Number(a.id) || 0;
+      const idB = Number(b.id) || 0;
+      return idB - idA;
     });
   }, [students, search, filters]);
 

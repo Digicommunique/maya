@@ -353,6 +353,18 @@ export default function Reports() {
           const str = dateVal.toString().trim();
           if (!str) return new Date().toISOString();
 
+          // Match DD-MM-YYYY or DD/MM/YYYY or DD.MM.YYYY
+          const dmYMatch = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
+          if (dmYMatch) {
+            const day = parseInt(dmYMatch[1], 10);
+            const month = parseInt(dmYMatch[2], 10) - 1;
+            const year = parseInt(dmYMatch[3], 10);
+            if (month >= 0 && month <= 11 && day >= 1 && day <= 31) {
+              const d = new Date(Date.UTC(year, month, day, 12, 0, 0));
+              if (!isNaN(d.getTime())) return d.toISOString();
+            }
+          }
+
           const directDate = new Date(str);
           if (!isNaN(directDate.getTime())) {
             return directDate.toISOString();

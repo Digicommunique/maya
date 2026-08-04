@@ -44,8 +44,22 @@ export default function Dashboard({ setActiveTab, user }: { setActiveTab: (tab: 
   const safeFormatDate = (dateVal: any, pattern: string = 'MMM dd, yyyy • hh:mm a') => {
     if (!dateVal) return 'N/A';
     try {
-      const d = new Date(dateVal);
-      if (isNaN(d.getTime())) return String(dateVal);
+      let d: Date | null = null;
+      if (typeof dateVal === 'string') {
+        const str = dateVal.trim();
+        const dmYMatch = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
+        if (dmYMatch) {
+          const day = parseInt(dmYMatch[1], 10);
+          const month = parseInt(dmYMatch[2], 10) - 1;
+          const year = parseInt(dmYMatch[3], 10);
+          d = new Date(year, month, day, 12, 0, 0);
+        } else {
+          d = new Date(str);
+        }
+      } else {
+        d = new Date(dateVal);
+      }
+      if (!d || isNaN(d.getTime())) return String(dateVal);
       return format(d, pattern);
     } catch {
       return String(dateVal);

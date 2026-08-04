@@ -143,27 +143,69 @@ export default function Receipt({ transaction, settings }: ReceiptProps) {
           </p>
         </div>
 
-        {/* Row 3 */}
-        <div>
-          <p className="text-slate-600 font-medium text-[11px]">Payment Mode</p>
-          <p className="text-slate-900 font-extrabold text-xs mt-0.5">
-            {paymentMode}
-          </p>
-        </div>
+        {/* Row 3 or Split Payment Breakdown */}
+        {transaction.splitTransactions && transaction.splitTransactions.length > 1 ? (
+          <div className="col-span-3 pt-2">
+            <p className="text-slate-600 font-bold text-[11px] uppercase tracking-wider mb-2">
+              Payment Breakdown ({transaction.splitTransactions.length} Transactions Recorded)
+            </p>
+            <div className="border border-slate-200 rounded-xl overflow-hidden">
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold text-[11px]">
+                  <tr>
+                    <th className="py-2 px-3">#</th>
+                    <th className="py-2 px-3">Payment Mode</th>
+                    <th className="py-2 px-3">Transaction ID</th>
+                    <th className="py-2 px-3">Date</th>
+                    <th className="py-2 px-3 text-right">Amount (₹)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs font-medium">
+                  {transaction.splitTransactions.map((st, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50">
+                      <td className="py-2 px-3 font-bold text-slate-400">{idx + 1}</td>
+                      <td className="py-2 px-3 text-slate-900 font-bold">{cleanVal(st.payment_mode)}</td>
+                      <td className="py-2 px-3 font-mono text-slate-700">{cleanVal(st.transaction_id || 'N/A')}</td>
+                      <td className="py-2 px-3 text-slate-600">{st.transaction_date || 'N/A'}</td>
+                      <td className="py-2 px-3 text-right font-bold text-slate-900">₹ {(Number(st.amount) || 0).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-slate-50 border-t border-slate-200 font-black text-slate-900 text-xs">
+                  <tr>
+                    <td colSpan={4} className="py-2.5 px-3 text-right uppercase tracking-wider text-[11px]">Total Paid Amount</td>
+                    <td className="py-2.5 px-3 text-right text-sm text-emerald-700 font-black">
+                      ₹ {transaction.splitTransactions.reduce((acc, st) => acc + (Number(st.amount) || 0), 0).toFixed(2)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div>
+              <p className="text-slate-600 font-medium text-[11px]">Payment Mode</p>
+              <p className="text-slate-900 font-extrabold text-xs mt-0.5">
+                {paymentMode}
+              </p>
+            </div>
 
-        <div>
-          <p className="text-slate-600 font-medium text-[11px]">Transaction ID</p>
-          <p className="text-slate-900 font-extrabold text-xs mt-0.5 font-mono">
-            {txnId}
-          </p>
-        </div>
+            <div>
+              <p className="text-slate-600 font-medium text-[11px]">Transaction ID</p>
+              <p className="text-slate-900 font-extrabold text-xs mt-0.5 font-mono">
+                {txnId}
+              </p>
+            </div>
 
-        <div>
-          <p className="text-slate-600 font-medium text-[11px]">Amount Paid</p>
-          <p className="text-slate-900 font-black text-sm mt-0.5">
-            ₹ {amountPaid}
-          </p>
-        </div>
+            <div>
+              <p className="text-slate-600 font-medium text-[11px]">Amount Paid</p>
+              <p className="text-slate-900 font-black text-sm mt-0.5">
+                ₹ {amountPaid}
+              </p>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Signature Section */}

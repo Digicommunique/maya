@@ -857,10 +857,15 @@ apiRouter.get("/transactions", asyncHandler(async (req, res) => {
 apiRouter.post("/transactions", asyncHandler(async (req, res) => {
   const { student_id, amount, payment_mode, transaction_id, academic_term, transaction_date, bank_account, merge_duplicate } = req.body;
   
-  let finalTxId = transaction_id;
+  let finalTxId = transaction_id ? String(transaction_id).trim() : '';
 
-  if (transaction_id) {
-    const { data: existing } = await supabase.from("transactions").select("id").eq("transaction_id", transaction_id).maybeSingle();
+  if (finalTxId) {
+    const { data: existing } = await supabase
+      .from("transactions")
+      .select("id, student_id, student:students(name, roll_no)")
+      .eq("transaction_id", finalTxId)
+      .maybeSingle();
+
     if (existing) {
       if (merge_duplicate) {
         const updObj: any = { student_id, amount, payment_mode, academic_term, transaction_date, bank_account };
@@ -873,8 +878,13 @@ apiRouter.post("/transactions", asyncHandler(async (req, res) => {
         if (updErr) return res.status(500).json({ error: "Merge failed", message: updErr.message });
         return res.json({ success: true, merged: true, id: existing.id, transaction_id: finalTxId });
       } else {
-        // Automatically keep unique ID for new payment without throwing error or showing duplicate prompt
-        finalTxId = `${transaction_id}_${Math.floor(100 + Math.random() * 900)}`;
+        const studentInfo = (existing as any)?.student;
+        const studentName = studentInfo?.name ? studentInfo.name : 'another student';
+        const rollNo = studentInfo?.roll_no ? ` (Roll No: ${studentInfo.roll_no})` : '';
+        return res.status(400).json({
+          error: "DUPLICATE_TRANSACTION_ID",
+          message: `Duplicate Transaction ID! Transaction ID '${finalTxId}' has already been assigned to ${studentName}${rollNo} in record.`
+        });
       }
     }
   }
@@ -898,13 +908,42 @@ apiRouter.post("/transactions", asyncHandler(async (req, res) => {
     error = retryRes.error;
   }
   
-  if (error) return res.status(500).json({ error: "SERVER_ERROR", message: error.message });
+  if (error) {
+    if (error.code === '23505' || error.message?.includes('unique') || error.message?.includes('duplicate')) {
+      return res.status(400).json({
+        error: "DUPLICATE_TRANSACTION_ID",
+        message: `Duplicate Transaction ID! Transaction ID '${finalTxId}' has already been assigned to another student in record.`
+      });
+    }
+    return res.status(500).json({ error: "SERVER_ERROR", message: error.message });
+  }
   res.json({ success: true, id: inserted?.id, transaction_id: finalTxId });
 }));
 
 apiRouter.put("/transactions/:id", asyncHandler(async (req, res) => {
   const { student_id, amount, payment_mode, transaction_id, academic_term, transaction_date, bank_account, edited_by = "Accountant" } = req.body;
   
+  let cleanTxId = transaction_id ? String(transaction_id).trim() : '';
+
+  if (cleanTxId) {
+    const { data: existing } = await supabase
+      .from("transactions")
+      .select("id, student_id, student:students(name, roll_no)")
+      .eq("transaction_id", cleanTxId)
+      .neq("id", req.params.id)
+      .maybeSingle();
+
+    if (existing) {
+      const studentInfo = (existing as any)?.student;
+      const studentName = studentInfo?.name ? studentInfo.name : 'another student';
+      const rollNo = studentInfo?.roll_no ? ` (Roll No: ${studentInfo.roll_no})` : '';
+      return res.status(400).json({
+        error: "DUPLICATE_TRANSACTION_ID",
+        message: `Duplicate Transaction ID! Transaction ID '${cleanTxId}' has already been assigned to ${studentName}${rollNo} in record.`
+      });
+    }
+  }
+
   // Retrieve existing transaction for previous_data audit
   const { data: existing } = await supabase
     .from("transactions")
@@ -928,7 +967,7 @@ apiRouter.put("/transactions/:id", asyncHandler(async (req, res) => {
   } : null);
 
   const updatePayload: any = {
-    student_id, amount, payment_mode, transaction_id, academic_term, transaction_date, bank_account,
+    student_id, amount, payment_mode, transaction_id: cleanTxId, academic_term, transaction_date, bank_account,
     is_edited: true,
     edited_by,
     edited_at: new Date().toISOString()

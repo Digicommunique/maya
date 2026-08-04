@@ -87,4 +87,5 @@ export interface Transaction {
   edited_by?: string;
   edited_at?: string;
   previous_data?: any;
+  splitTransactions?: Transaction[];
 }
