@@ -210,13 +210,13 @@ export default function FeeCollection() {
 
     const savedTxList: Transaction[] = [];
 
-    for (let i = 0; i < paymentEntries.length; i++) {
-      const entry = paymentEntries[i];
+    if (paymentEntries.length === 1) {
+      const entry = paymentEntries[0];
       const payload: any = {
         student_id: selectedStudent.id,
         amount: parseFloat(entry.amount),
         payment_mode: entry.payment_mode,
-        transaction_id: entry.transaction_id.trim() || `CASH_${Date.now()}_${i + 1}`,
+        transaction_id: entry.transaction_id.trim() || `CASH_${Date.now()}_1`,
         academic_term: academicTerm || '2026-27',
         course: paymentCourse || selectedStudent.semester_name || '',
         branch: paymentBranch || selectedStudent.branch_name || '',
@@ -232,7 +232,7 @@ export default function FeeCollection() {
 
       const data = await res.json();
       if (!res.ok) {
-        setError(data.message || `Failed to save Transaction #${i + 1}. Please try again.`);
+        setError(data.message || 'Failed to save transaction. Please try again.');
         return;
       }
 
@@ -245,7 +245,7 @@ export default function FeeCollection() {
         academic_term: academicTerm || '2026-27',
         course: paymentCourse || selectedStudent.semester_name || '',
         branch: paymentBranch || selectedStudent.branch_name || '',
-        transaction_date: entry.transaction_date,
+        transaction_date: entry.transaction_date || format(new Date(), 'yyyy-MM-dd'),
         bank_account: entry.bank_account,
         student_name: selectedStudent.name,
         roll_no: selectedStudent.roll_no,
@@ -254,6 +254,52 @@ export default function FeeCollection() {
         semester_name: paymentCourse || selectedStudent.semester_name,
         created_at: new Date().toISOString()
       } as Transaction);
+    } else {
+      const txPayloads = paymentEntries.map((entry, idx) => ({
+        student_id: selectedStudent.id,
+        amount: parseFloat(entry.amount),
+        payment_mode: entry.payment_mode,
+        transaction_id: entry.transaction_id.trim() || `CASH_${Date.now()}_${idx + 1}`,
+        academic_term: academicTerm || '2026-27',
+        course: paymentCourse || selectedStudent.semester_name || '',
+        branch: paymentBranch || selectedStudent.branch_name || '',
+        transaction_date: entry.transaction_date || format(new Date(), 'yyyy-MM-dd'),
+        bank_account: entry.bank_account
+      }));
+
+      const res = await fetch('/api/transactions/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transactions: txPayloads })
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.savedList || data.savedList.length === 0) {
+        setError(data.message || (data.errors && data.errors[0]) || 'Failed to save batch transactions.');
+        return;
+      }
+
+      data.savedList.forEach((savedItem: any, idx: number) => {
+        const entry = paymentEntries[idx] || paymentEntries[0];
+        savedTxList.push({
+          id: savedItem.id,
+          student_id: selectedStudent.id,
+          amount: parseFloat(entry.amount),
+          payment_mode: entry.payment_mode,
+          transaction_id: savedItem.transaction_id || entry.transaction_id,
+          academic_term: academicTerm || '2026-27',
+          course: paymentCourse || selectedStudent.semester_name || '',
+          branch: paymentBranch || selectedStudent.branch_name || '',
+          transaction_date: entry.transaction_date || format(new Date(), 'yyyy-MM-dd'),
+          bank_account: entry.bank_account,
+          student_name: selectedStudent.name,
+          roll_no: selectedStudent.roll_no,
+          guardian_name: selectedStudent.guardian_name,
+          branch_name: paymentBranch || selectedStudent.branch_name,
+          semester_name: paymentCourse || selectedStudent.semester_name,
+          created_at: savedItem.created_at || new Date().toISOString()
+        } as Transaction);
+      });
     }
 
     // Build main combined transaction object for receipt

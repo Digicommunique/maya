@@ -414,7 +414,7 @@ export default function StudentDirectory() {
         let currentSemesters = settingsRes?.semesters || semesters;
         let currentSessions = settingsRes?.sessions || sessions;
 
-        // Keep a local copy of lists that we can dynamically append to
+        // Keep local copies
         let activeBranches = [...currentBranches];
         let activeSemesters = [...currentSemesters];
         let activeSessions = [...currentSessions];
@@ -429,12 +429,72 @@ export default function StudentDirectory() {
           return '';
         };
 
-        let processed = 0;
-        let successCount = 0;
-        let failCount = 0;
-        const errors: string[] = [];
+        // 1. Gather all unique branches, semesters, and sessions needed
+        const uniqueBranchesNeeded = new Set<string>();
+        const uniqueSemestersNeeded = new Set<string>();
+        const uniqueSessionsNeeded = new Set<string>();
 
-        for (const row of data) {
+        data.forEach((row: any) => {
+          const br = findValue(row, ['branch', 'stream', 'branch_name']);
+          const sem = findValue(row, ['semester', 'sem', 'semester_name']);
+          const sess = findValue(row, ['session', 'academic session', 'year', 'session_name']);
+          
+          if (br && br.toString().trim()) uniqueBranchesNeeded.add(br.toString().trim());
+          if (sem && sem.toString().trim()) uniqueSemestersNeeded.add(sem.toString().trim());
+          if (sess && sess.toString().trim()) uniqueSessionsNeeded.add(sess.toString().trim());
+        });
+
+        // Add default auto fallbacks if needed
+        uniqueBranchesNeeded.add('[Auto] General');
+        uniqueSemestersNeeded.add('[Auto] Semester 1');
+        uniqueSessionsNeeded.add('[Auto] 2025-2026');
+
+        // Create missing master data in parallel
+        let masterCreated = false;
+        const branchCreatePromises = Array.from(uniqueBranchesNeeded).filter(
+          b => !activeBranches.some(ext => ext.name.toLowerCase() === b.toLowerCase())
+        ).map(bName => fetch('/api/settings/branch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: bName })
+        }));
+
+        const semCreatePromises = Array.from(uniqueSemestersNeeded).filter(
+          s => !activeSemesters.some(ext => ext.name.toLowerCase() === s.toLowerCase())
+        ).map(sName => fetch('/api/settings/semester', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: sName })
+        }));
+
+        const sessCreatePromises = Array.from(uniqueSessionsNeeded).filter(
+          ss => !activeSessions.some(ext => ext.name.toLowerCase() === ss.toLowerCase())
+        ).map(ssName => fetch('/api/settings/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: ssName })
+        }));
+
+        if (branchCreatePromises.length > 0 || semCreatePromises.length > 0 || sessCreatePromises.length > 0) {
+          masterCreated = true;
+          await Promise.all([...branchCreatePromises, ...semCreatePromises, ...sessCreatePromises]);
+        }
+
+        if (masterCreated) {
+          const freshSettings = await fetch('/api/settings').then(r => r.json()).catch(() => null);
+          if (freshSettings) {
+            activeBranches = freshSettings.branches || activeBranches;
+            activeSemesters = freshSettings.semesters || activeSemesters;
+            activeSessions = freshSettings.sessions || activeSessions;
+            setBranches(activeBranches);
+            setSemesters(activeSemesters);
+            setSessions(activeSessions);
+          }
+        }
+
+        // 2. Prepare student payloads
+        const studentPayloads: any[] = [];
+        data.forEach((row: any) => {
           let studentName = findValue(row, ['name', 'student name', 'student', 'full name']);
           let rollNo = findValue(row, ['roll no', 'roll number', 'id', 'rollno', 'roll_no']);
           let guardian = findValue(row, ['guardian', 'guardian name', 'father name', 'father\'s name', 'guardian_name']);
@@ -444,7 +504,6 @@ export default function StudentDirectory() {
           let semName = findValue(row, ['semester', 'sem', 'semester_name']);
           let sessName = findValue(row, ['session', 'academic session', 'year', 'session_name']);
 
-          // Create dynamic/dummy values if missing or empty
           if (!studentName || !studentName.toString().trim()) {
             studentName = `[Auto] Student_${Math.floor(1000 + Math.random() * 9000)}`;
           } else {
@@ -479,142 +538,70 @@ export default function StudentDirectory() {
           const cleanSem = semName && semName.toString().trim() ? semName.toString().trim() : '[Auto] Semester 1';
           const cleanSess = sessName && sessName.toString().trim() ? sessName.toString().trim() : '[Auto] 2025-2026';
 
-          // Resolve Program (Fee Plan)
           const matchedPlanId = resolvePlan(progName, currentPlans);
+          const matchedBranchId = (activeBranches.find(b => b.name.toLowerCase() === cleanBranch.toLowerCase())?.id || '').toString();
+          const matchedSemesterId = (activeSemesters.find(s => s.name.toLowerCase() === cleanSem.toLowerCase())?.id || '').toString();
+          const matchedSessionId = (activeSessions.find(s => s.name.toLowerCase() === cleanSess.toLowerCase())?.id || '').toString();
 
-          // Resolve or Create Branch
-          let matchedBranchId = '';
-          if (cleanBranch) {
-            const ext = activeBranches.find(b => b.name.toLowerCase() === cleanBranch.toLowerCase());
-            if (ext) {
-              matchedBranchId = ext.id.toString();
-            } else {
-              try {
-                const bRes = await fetch('/api/settings/branch', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ name: cleanBranch })
-                });
-                if (bRes.ok) {
-                  const sData = await fetch('/api/settings').then(r => r.json());
-                  activeBranches = sData.branches || [];
-                  setBranches(activeBranches);
-                  matchedBranchId = (activeBranches.find(b => b.name.toLowerCase() === cleanBranch.toLowerCase())?.id || '').toString();
-                }
-              } catch (err) {
-                console.error("Branch create error:", err);
-              }
-            }
-          }
+          studentPayloads.push({
+            name: studentName,
+            guardian_name: guardian,
+            roll_no: rollNo,
+            phone: phoneNum,
+            plan_id: matchedPlanId,
+            branch_id: matchedBranchId,
+            semester_id: matchedSemesterId,
+            session_id: matchedSessionId,
+            merge_duplicate: true
+          });
+        });
 
-          // Resolve or Create Semester
-          let matchedSemesterId = '';
-          if (cleanSem) {
-            const ext = activeSemesters.find(s => s.name.toLowerCase() === cleanSem.toLowerCase());
-            if (ext) {
-              matchedSemesterId = ext.id.toString();
-            } else {
-              try {
-                const sRes = await fetch('/api/settings/semester', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ name: cleanSem })
-                });
-                if (sRes.ok) {
-                  const sData = await fetch('/api/settings').then(r => r.json());
-                  activeSemesters = sData.semesters || [];
-                  setSemesters(activeSemesters);
-                  matchedSemesterId = (activeSemesters.find(s => s.name.toLowerCase() === cleanSem.toLowerCase())?.id || '').toString();
-                }
-              } catch (err) {
-                console.error("Semester create error:", err);
-              }
-            }
-          }
+        // 3. Post to /api/students/bulk in batches of 250 for instant response
+        const batchSize = 250;
+        let successCount = 0;
+        let failCount = 0;
+        let processed = 0;
+        const allErrors: string[] = [];
 
-          // Resolve or Create Session
-          let matchedSessionId = '';
-          if (cleanSess) {
-            const ext = activeSessions.find(s => s.name.toLowerCase() === cleanSess.toLowerCase());
-            if (ext) {
-              matchedSessionId = ext.id.toString();
-            } else {
-              try {
-                const sRes = await fetch('/api/settings/session', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ name: cleanSess })
-                });
-                if (sRes.ok) {
-                  const sData = await fetch('/api/settings').then(r => r.json());
-                  activeSessions = sData.sessions || [];
-                  setSessions(activeSessions);
-                  matchedSessionId = (activeSessions.find(s => s.name.toLowerCase() === cleanSess.toLowerCase())?.id || '').toString();
-                }
-              } catch (err) {
-                console.error("Session create error:", err);
-              }
-            }
-          }
-
-          // Submit the student enroll POST
+        for (let i = 0; i < studentPayloads.length; i += batchSize) {
+          const chunk = studentPayloads.slice(i, i + batchSize);
           try {
-            let res = await fetch('/api/students', {
+            const bulkRes = await fetch('/api/students/bulk', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                name: studentName,
-                guardian_name: guardian,
-                roll_no: rollNo,
-                phone: phoneNum,
-                plan_id: matchedPlanId,
-                branch_id: matchedBranchId,
-                semester_id: matchedSemesterId,
-                session_id: matchedSessionId
-              })
+              body: JSON.stringify({ students: chunk })
             });
 
-            if (!res.ok) {
-              const errData = await res.json().catch(() => ({}));
-              if (errData.error === 'DUPLICATE_ROLLNO') {
-                // Retry with merge_duplicate: true to update their details automatically!
-                res = await fetch('/api/students', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    name: studentName,
-                    guardian_name: guardian,
-                    roll_no: rollNo,
-                    phone: phoneNum,
-                    plan_id: matchedPlanId,
-                    branch_id: matchedBranchId,
-                    semester_id: matchedSemesterId,
-                    session_id: matchedSessionId,
-                    merge_duplicate: true
-                  })
-                });
+            if (bulkRes.ok) {
+              const resData = await bulkRes.json();
+              successCount += resData.successCount || 0;
+              failCount += resData.failCount || 0;
+              if (Array.isArray(resData.errors)) {
+                allErrors.push(...resData.errors);
               }
-            }
-
-            if (res.ok) {
-              successCount++;
             } else {
-              const errData = await res.json().catch(() => ({}));
-              failCount++;
-              errors.push(`${studentName} (Roll: ${rollNo}): ${errData.message || 'Roll Number already exists'}`);
+              const errObj = await bulkRes.json().catch(() => ({}));
+              failCount += chunk.length;
+              allErrors.push(`Batch upload failed: ${errObj.message || 'Server error'}`);
             }
           } catch (err: any) {
-            failCount++;
-            errors.push(`${studentName} (Roll: ${rollNo}): ${err.message || 'Network error'}`);
+            failCount += chunk.length;
+            allErrors.push(`Batch network error: ${err.message || 'Connection lost'}`);
           }
 
-          processed++;
-          setImportStatus(prev => prev ? { ...prev, processed, successCount, failCount, errors } : null);
+          processed += chunk.length;
+          setImportStatus({
+            isOpen: true,
+            total: studentPayloads.length,
+            processed,
+            successCount,
+            failCount,
+            errors: allErrors
+          });
         }
 
         // Trigger parent update
         fetchData();
-        // Also fire event to let App.tsx know settings might have been updated
         try {
           window.dispatchEvent(new CustomEvent('org-settings-updated'));
         } catch (e) {

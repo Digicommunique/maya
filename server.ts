@@ -753,6 +753,104 @@ apiRouter.post("/students", asyncHandler(async (req, res) => {
   res.json({ success: true, id: data?.id });
 }));
 
+// High-speed Bulk Students Endpoint
+apiRouter.post("/students/bulk", asyncHandler(async (req, res) => {
+  const { students } = req.body;
+  if (!Array.isArray(students) || students.length === 0) {
+    return res.status(400).json({ error: "INVALID_PAYLOAD", message: "Students array is required and cannot be empty." });
+  }
+
+  let successCount = 0;
+  let failCount = 0;
+  const errors: string[] = [];
+  const insertedIds: any[] = [];
+
+  // Extract all roll_nos to check existing in bulk
+  const rollNos = students.map((s: any) => s.roll_no ? String(s.roll_no).trim() : '').filter(Boolean);
+  const existingMap = new Map<string, any>();
+
+  if (rollNos.length > 0) {
+    const { data: existingRecords } = await supabase
+      .from("students")
+      .select("id, roll_no, name")
+      .in("roll_no", rollNos);
+    
+    (existingRecords || []).forEach((rec: any) => {
+      if (rec.roll_no) existingMap.set(String(rec.roll_no).trim().toLowerCase(), rec);
+    });
+  }
+
+  const toInsert: any[] = [];
+
+  for (let i = 0; i < students.length; i++) {
+    const s = students[i];
+    const rollNo = s.roll_no ? String(s.roll_no).trim() : '';
+    const cleanRollNoLower = rollNo.toLowerCase();
+
+    if (rollNo && existingMap.has(cleanRollNoLower)) {
+      const existing = existingMap.get(cleanRollNoLower);
+      if (s.merge_duplicate) {
+        const { error: updErr } = await supabase.from("students").update({
+          name: s.name,
+          guardian_name: s.guardian_name,
+          phone: s.phone,
+          plan_id: s.plan_id ? Number(s.plan_id) : null,
+          branch_id: s.branch_id ? Number(s.branch_id) : null,
+          semester_id: s.semester_id ? Number(s.semester_id) : null,
+          session_id: s.session_id ? Number(s.session_id) : null
+        }).eq("id", existing.id);
+
+        if (updErr) {
+          failCount++;
+          errors.push(`${s.name} (Roll: ${rollNo}): ${updErr.message}`);
+        } else {
+          successCount++;
+          insertedIds.push(existing.id);
+        }
+      } else {
+        failCount++;
+        errors.push(`${s.name} (Roll: ${rollNo}): Roll Number already assigned to ${existing.name}`);
+      }
+    } else {
+      toInsert.push({
+        name: s.name,
+        guardian_name: s.guardian_name,
+        roll_no: rollNo || `[Auto] R-${Math.floor(100000 + Math.random() * 900000)}`,
+        phone: s.phone,
+        plan_id: s.plan_id ? Number(s.plan_id) : null,
+        branch_id: s.branch_id ? Number(s.branch_id) : null,
+        semester_id: s.semester_id ? Number(s.semester_id) : null,
+        session_id: s.session_id ? Number(s.session_id) : null,
+        created_at: s.created_at || new Date().toISOString()
+      });
+    }
+  }
+
+  if (toInsert.length > 0) {
+    const { data: insertedData, error: batchErr } = await supabase.from("students").insert(toInsert).select("id");
+    if (batchErr) {
+      console.warn("[BULK INSERT FALLBACK] Batch insert encountered error, falling back to individual inserts:", batchErr.message);
+      for (const item of toInsert) {
+        const { data: singleData, error: singleErr } = await supabase.from("students").insert(item).select("id").single();
+        if (singleErr) {
+          failCount++;
+          errors.push(`${item.name} (Roll: ${item.roll_no}): ${singleErr.message}`);
+        } else {
+          successCount++;
+          if (singleData?.id) insertedIds.push(singleData.id);
+        }
+      }
+    } else {
+      successCount += toInsert.length;
+      (insertedData || []).forEach((item: any) => {
+        if (item.id) insertedIds.push(item.id);
+      });
+    }
+  }
+
+  res.json({ success: true, total: students.length, successCount, failCount, errors, insertedIds });
+}));
+
 apiRouter.get("/students/:id", asyncHandler(async (req, res) => {
   const { data: student, error } = await supabase
     .from("students")
@@ -918,6 +1016,48 @@ apiRouter.post("/transactions", asyncHandler(async (req, res) => {
     return res.status(500).json({ error: "SERVER_ERROR", message: error.message });
   }
   res.json({ success: true, id: inserted?.id, transaction_id: finalTxId });
+}));
+
+// High-speed Bulk Transactions Endpoint
+apiRouter.post("/transactions/bulk", asyncHandler(async (req, res) => {
+  const { transactions } = req.body;
+  if (!Array.isArray(transactions) || transactions.length === 0) {
+    return res.status(400).json({ error: "INVALID_PAYLOAD", message: "Transactions array is required and cannot be empty." });
+  }
+
+  const savedList: any[] = [];
+  const errors: string[] = [];
+
+  for (let i = 0; i < transactions.length; i++) {
+    const t = transactions[i];
+    const finalTxId = t.transaction_id ? String(t.transaction_id).trim() : `CASH_${Date.now()}_${i + 1}`;
+    const insertPayload: any = {
+      student_id: Number(t.student_id),
+      amount: Number(t.amount) || 0,
+      payment_mode: t.payment_mode || 'Cash',
+      transaction_id: finalTxId,
+      academic_term: t.academic_term || '2026-27',
+      transaction_date: t.transaction_date || new Date().toISOString().split('T')[0],
+      bank_account: t.bank_account || ''
+    };
+    if (t.created_at) insertPayload.created_at = t.created_at;
+
+    let { data: inserted, error } = await supabase.from("transactions").insert(insertPayload).select().single();
+    if (error && (error.message?.includes("bank_account") || error.message?.includes("schema cache"))) {
+      delete insertPayload.bank_account;
+      const retryRes = await supabase.from("transactions").insert(insertPayload).select().single();
+      inserted = retryRes.data;
+      error = retryRes.error;
+    }
+
+    if (error) {
+      errors.push(`Transaction #${i + 1}: ${error.message}`);
+    } else if (inserted) {
+      savedList.push(inserted);
+    }
+  }
+
+  res.json({ success: true, count: savedList.length, savedList, errors });
 }));
 
 apiRouter.put("/transactions/:id", asyncHandler(async (req, res) => {
