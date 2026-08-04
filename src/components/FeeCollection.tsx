@@ -28,6 +28,7 @@ import {
   Sparkles,
   ChevronUp,
   Grid,
+  UserCheck
   ChevronLeft,
   ChevronRight,
   UploadCloud,
@@ -467,6 +468,7 @@ export default function FeeCollection({ user }: { user?: any }) {
 
     if (paymentEntries.length === 1) {
       const entry = paymentEntries[0];
+      const creatorName = user?.name ? `${user.name} (${user.role === 'accountant' ? 'Accountant' : user.role})` : 'Accountant';
       const payload: any = {
         student_id: selectedStudent.id,
         amount: parseFloat(entry.amount),
@@ -476,7 +478,8 @@ export default function FeeCollection({ user }: { user?: any }) {
         course: paymentCourse || selectedStudent.semester_name || '',
         branch: paymentBranch || selectedStudent.branch_name || '',
         transaction_date: entry.transaction_date || format(new Date(), 'yyyy-MM-dd'),
-        bank_account: entry.bank_account
+        bank_account: entry.bank_account,
+        recorded_by: creatorName
       };
 
       const res = await fetch('/api/transactions', {
@@ -510,6 +513,7 @@ export default function FeeCollection({ user }: { user?: any }) {
         created_at: new Date().toISOString()
       } as Transaction);
     } else {
+      const creatorName = user?.name ? `${user.name} (${user.role === 'accountant' ? 'Accountant' : user.role})` : 'Accountant';
       const txPayloads = paymentEntries.map((entry, idx) => ({
         student_id: selectedStudent.id,
         amount: parseFloat(entry.amount),
@@ -519,7 +523,8 @@ export default function FeeCollection({ user }: { user?: any }) {
         course: paymentCourse || selectedStudent.semester_name || '',
         branch: paymentBranch || selectedStudent.branch_name || '',
         transaction_date: entry.transaction_date || format(new Date(), 'yyyy-MM-dd'),
-        bank_account: entry.bank_account
+        bank_account: entry.bank_account,
+        recorded_by: creatorName
       }));
 
       const res = await fetch('/api/transactions/bulk', {

@@ -854,7 +854,8 @@ apiRouter.post("/students", asyncHandler(async (req, res) => {
   }
 
   const insertPayload: any = {
-    name, guardian_name, roll_no, phone, plan_id, branch_id, semester_id, session_id
+    name, guardian_name, roll_no, phone, plan_id, branch_id, semester_id, session_id,
+    created_by: req.body.created_by || req.body.staff_name || "Accountant"
   };
   if (created_at) {
     insertPayload.created_at = created_at;
@@ -934,6 +935,7 @@ apiRouter.post("/students/bulk", asyncHandler(async (req, res) => {
         branch_id: s.branch_id ? Number(s.branch_id) : null,
         semester_id: s.semester_id ? Number(s.semester_id) : null,
         session_id: s.session_id ? Number(s.session_id) : null,
+        created_by: s.created_by || req.body.created_by || "Accountant",
         created_at: s.created_at || new Date().toISOString()
       });
     }
@@ -1101,7 +1103,8 @@ apiRouter.post("/transactions", asyncHandler(async (req, res) => {
   }
 
   const insertPayload: any = {
-    student_id, amount: Number(amount) || 0, payment_mode, transaction_id: finalTxId, academic_term, transaction_date, bank_account
+    student_id, amount: Number(amount) || 0, payment_mode, transaction_id: finalTxId, academic_term, transaction_date, bank_account,
+    recorded_by: recorded_by || req.body.recorded_by || req.body.created_by || req.body.staff_name || "Accountant"
   };
   if (req.body.created_at) {
     insertPayload.created_at = req.body.created_at;
@@ -1151,7 +1154,8 @@ apiRouter.post("/transactions/bulk", asyncHandler(async (req, res) => {
       transaction_id: finalTxId,
       academic_term: t.academic_term || '2026-27',
       transaction_date: t.transaction_date || new Date().toISOString().split('T')[0],
-      bank_account: t.bank_account || ''
+      bank_account: t.bank_account || '',
+      recorded_by: t.recorded_by || req.body.recorded_by || req.body.created_by || "Accountant"
     };
     if (t.created_at) insertPayload.created_at = t.created_at;
 

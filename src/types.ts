@@ -62,6 +62,8 @@ export interface Student {
   edited_by?: string;
   edited_at?: string;
   previous_data?: any;
+  created_by?: string;
+  created_at?: string;
 }
 
 export interface Transaction {
@@ -88,4 +90,6 @@ export interface Transaction {
   edited_at?: string;
   previous_data?: any;
   splitTransactions?: Transaction[];
+  recorded_by?: string;
+  created_by?: string;
 }

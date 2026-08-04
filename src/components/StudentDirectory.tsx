@@ -19,7 +19,8 @@ import {
   History,
   Printer,
   FileDown,
-  Loader2
+  Loader2,
+  UserCheck
 } from 'lucide-react';
 import { safeFetchJson } from '../utils/api';
 import { motion, AnimatePresence } from 'motion/react';
@@ -211,8 +212,10 @@ export default function StudentDirectory({ user }: { user?: any }) {
     const url = editingStudent ? `/api/students/${editingStudent.id}` : '/api/students';
     const method = editingStudent ? 'PUT' : 'POST';
 
+    const creatorName = user?.name ? `${user.name} (${user.role === 'accountant' ? 'Accountant' : user.role})` : 'Accountant';
     const payload: any = {
       ...newStudent,
+      created_by: creatorName
     };
 
     if (editingStudent) {
@@ -545,6 +548,7 @@ export default function StudentDirectory({ user }: { user?: any }) {
           const matchedSemesterId = (activeSemesters.find(s => s.name.toLowerCase() === cleanSem.toLowerCase())?.id || '').toString();
           const matchedSessionId = (activeSessions.find(s => s.name.toLowerCase() === cleanSess.toLowerCase())?.id || '').toString();
 
+          const creatorName = user?.name ? `${user.name} (${user.role === 'accountant' ? 'Accountant' : user.role})` : 'Accountant';
           studentPayloads.push({
             name: studentName,
             guardian_name: guardian,
@@ -554,6 +558,7 @@ export default function StudentDirectory({ user }: { user?: any }) {
             branch_id: matchedBranchId,
             semester_id: matchedSemesterId,
             session_id: matchedSessionId,
+            created_by: creatorName,
             merge_duplicate: true
           });
         });
@@ -768,6 +773,7 @@ export default function StudentDirectory({ user }: { user?: any }) {
                 <th className="py-4 px-6 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Branch</th>
                 <th className="py-4 px-6 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Semester</th>
                 <th className="py-4 px-6 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Session</th>
+                <th className="py-4 px-6 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Enrolled By</th>
                 <th className="py-4 px-6 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Action</th>
               </tr>
             </thead>
@@ -842,6 +848,12 @@ export default function StudentDirectory({ user }: { user?: any }) {
                       isAuto(student.session_name) ? "bg-amber-100 text-amber-700 font-mono" : "bg-slate-100 text-slate-700"
                     )}>
                       {cleanVal(student.session_name)}
+                    </span>
+                  </td>
+                  <td className="py-4 px-6 text-sm">
+                    <span className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/60 inline-flex items-center gap-1">
+                      <UserCheck size={12} className="text-emerald-600 shrink-0" />
+                      {cleanVal(student.created_by || (student.edited_by ? `Edited: ${student.edited_by}` : 'Accountant'))}
                     </span>
                   </td>
                   <td className="py-4 px-6">
