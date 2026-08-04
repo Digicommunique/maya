@@ -1544,46 +1544,29 @@ apiRouter.get("/download-apk", (req, res) => {
 });
 
 apiRouter.get("/ledger", asyncHandler(async (req, res) => {
-  const [{ data: students, error: studentErr }, { data: transactions, error: txErr }] = await Promise.all([
-    supabase
-      .from("students")
-      .select(`
-        id,
-        name,
-        roll_no,
-        guardian_name,
-        phone,
-        is_edited,
-        edited_by,
-        edited_at,
-        previous_data,
-        plan:fee_plans(id, name, total_amount),
-        branch:branches(name),
-        semester:semesters(name),
-        session:sessions(name)
-      `),
-    supabase
-      .from("transactions")
-      .select("id, student_id, receipt_no, amount, payment_mode, payment_type, transaction_date, created_at, remarks, is_edited, edited_by, edited_at, previous_data")
-      .order("created_at", { ascending: true })
-  ]);
+  const { data: students, error } = await supabase
+    .from("students")
+    .select(`
+      id,
+      name,
+      roll_no,
+      guardian_name,
+      phone,
+      is_edited,
+      edited_by,
+      edited_at,
+      previous_data,
+      plan:fee_plans(id, name, total_amount),
+      branch:branches(name),
+      semester:semesters(name),
+      session:sessions(name),
+      transactions(*)
+    `);
     
-  if (studentErr) throw studentErr;
-  if (txErr) console.warn("Ledger transaction query warning:", txErr);
+  if (error) throw error;
   
-  // Group transactions by student_id
-  const txMap = new Map<number, any[]>();
-  (transactions || []).forEach((t: any) => {
-    if (t.student_id) {
-      const sid = Number(t.student_id);
-      if (!txMap.has(sid)) txMap.set(sid, []);
-      txMap.get(sid)!.push(t);
-    }
-  });
-
   const ledger = (students || []).map((s: any) => {
-    const rawTxs = txMap.get(Number(s.id)) || [];
-    rawTxs.sort((a: any, b: any) => {
+    const rawTxs = (s.transactions || []).sort((a: any, b: any) => {
       const dateA = new Date(a.created_at || a.transaction_date).getTime();
       const dateB = new Date(b.created_at || b.transaction_date).getTime();
       return dateA - dateB;

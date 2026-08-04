@@ -82,13 +82,15 @@ export default function Dashboard({ setActiveTab, user }: { setActiveTab: (tab: 
     Promise.all([
       safeFetchJson('/api/summary', undefined, null),
       safeFetchJson('/api/transactions', undefined, []),
+      safeFetchJson('/api/ledger', undefined, []),
       safeFetchJson('/api/students', undefined, [])
     ])
-    .then(([summaryData, txsData, studentsData]) => {
+    .then(([summaryData, txsData, ledgerData, studentsData]) => {
       if (summaryData && !summaryData.error) {
         setSummary(summaryData);
       }
       if (Array.isArray(txsData)) setAllTxs(txsData);
+      if (Array.isArray(ledgerData)) setAllLedger(ledgerData);
       if (Array.isArray(studentsData)) setAllStudents(studentsData);
     })
     .catch(err => console.error("Dashboard data fetch error:", err));
@@ -188,15 +190,11 @@ export default function Dashboard({ setActiveTab, user }: { setActiveTab: (tab: 
 
     // 3. Program/Branch Fee Bar Chart
     const progMap: Record<string, { paid: number; due: number }> = {};
-    const studentSource = allStudents.length > 0 ? allStudents : allLedger;
-    studentSource.forEach((st: any) => {
+    allLedger.forEach((st: any) => {
       const prog = cleanVal(st.plan_name) || 'General Program';
       if (!progMap[prog]) progMap[prog] = { paid: 0, due: 0 };
-      const paid = Number(st.total_paid || 0);
-      const planTotal = Number(st.plan_total || st.plan?.total_amount || st.total_due || 0);
-      const due = st.balance !== undefined ? Number(st.balance) : Math.max(0, planTotal - paid);
-      progMap[prog].paid += paid;
-      progMap[prog].due += due;
+      progMap[prog].paid += Number(st.total_paid || 0);
+      progMap[prog].due += Math.max(0, Number(st.balance || 0));
     });
 
     const programBars = Object.keys(progMap).map(prog => ({
@@ -211,7 +209,7 @@ export default function Dashboard({ setActiveTab, user }: { setActiveTab: (tab: 
       forecastData: forecastTrend,
       programBarData: programBars
     };
-  }, [allTxs, allStudents, allLedger, summary]);
+  }, [allTxs, allLedger, summary]);
 
   if (!summary) return <div className="flex items-center justify-center h-64 text-slate-500 font-medium">Loading Dashboard...</div>;
 
