@@ -134,11 +134,18 @@ export default function CourseSessionStudentBreakdown({
     };
   }, [students]);
 
-  // Filtered list of course names
-  const filteredCoursesList = useMemo(() => {
-    if (!searchQuery.trim()) return breakdownData.coursesList;
+  // Filtered lists of course and session names with cross-dimensional matching
+  const { filteredCoursesList, filteredSessionsList } = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return {
+        filteredCoursesList: breakdownData.coursesList,
+        filteredSessionsList: breakdownData.sessionsList
+      };
+    }
+
     const q = searchQuery.toLowerCase().trim();
-    return breakdownData.coursesList.filter(course => {
+
+    let courses = breakdownData.coursesList.filter(course => {
       if (course.toLowerCase().includes(q)) return true;
       const studentsInCourse = breakdownData.courseMap[course]?.studentsList || [];
       return studentsInCourse.some(s => 
@@ -148,13 +155,8 @@ export default function CourseSessionStudentBreakdown({
         (s.academic_term && s.academic_term.toLowerCase().includes(q))
       );
     });
-  }, [breakdownData, searchQuery]);
 
-  // Filtered list of session names
-  const filteredSessionsList = useMemo(() => {
-    if (!searchQuery.trim()) return breakdownData.sessionsList;
-    const q = searchQuery.toLowerCase().trim();
-    return breakdownData.sessionsList.filter(session => {
+    let sessions = breakdownData.sessionsList.filter(session => {
       if (session.toLowerCase().includes(q)) return true;
       const studentsInSession = breakdownData.sessionMap[session]?.studentsList || [];
       return studentsInSession.some(s => 
@@ -165,6 +167,25 @@ export default function CourseSessionStudentBreakdown({
         (s.plan_name && s.plan_name.toLowerCase().includes(q))
       );
     });
+
+    // Cross-link: If query matched specific sessions (e.g., "2024-25"), ensure programs active in those sessions are included
+    if (sessions.length > 0 && courses.length === 0) {
+      courses = breakdownData.coursesList.filter(course => 
+        sessions.some(sess => (breakdownData.matrixMap[course]?.[sess] || 0) > 0)
+      );
+    }
+
+    // Cross-link: If query matched specific programs (e.g., "B.Tech"), ensure sessions active in those programs are included
+    if (courses.length > 0 && sessions.length === 0) {
+      sessions = breakdownData.sessionsList.filter(session => 
+        courses.some(crs => (breakdownData.matrixMap[crs]?.[session] || 0) > 0)
+      );
+    }
+
+    return {
+      filteredCoursesList: courses,
+      filteredSessionsList: sessions
+    };
   }, [breakdownData, searchQuery]);
 
   // Filtered program cards and session cards based on search query
@@ -176,17 +197,16 @@ export default function CourseSessionStudentBreakdown({
     return breakdownData.sessionWise.filter(s => filteredSessionsList.includes(s.session));
   }, [breakdownData.sessionWise, filteredSessionsList]);
 
-  // Export Matrix to Excel
+  // Export Matrix to Excel (respects current filter)
   const exportMatrixExcel = () => {
     const excelRows: any[] = [];
+    const activeCourses = filteredCoursesList.length > 0 ? filteredCoursesList : breakdownData.coursesList;
+    const activeSessions = filteredSessionsList.length > 0 ? filteredSessionsList : breakdownData.sessionsList;
 
-    // Header row
-    const headers = ['Program / Course', ...breakdownData.sessionsList, 'Total Active Students'];
-    
-    breakdownData.coursesList.forEach(course => {
+    activeCourses.forEach(course => {
       const row: Record<string, any> = { 'Program / Course': course };
       let rowTotal = 0;
-      breakdownData.sessionsList.forEach(session => {
+      activeSessions.forEach(session => {
         const count = breakdownData.matrixMap[course]?.[session] || 0;
         row[session] = count;
         rowTotal += count;
@@ -198,9 +218,9 @@ export default function CourseSessionStudentBreakdown({
     // Column Totals Row
     const totalRow: Record<string, any> = { 'Program / Course': 'TOTAL ACTIVE STUDENTS' };
     let grandTotal = 0;
-    breakdownData.sessionsList.forEach(session => {
+    activeSessions.forEach(session => {
       let colTotal = 0;
-      breakdownData.coursesList.forEach(course => {
+      activeCourses.forEach(course => {
         colTotal += breakdownData.matrixMap[course]?.[session] || 0;
       });
       totalRow[session] = colTotal;
