@@ -44,8 +44,9 @@ function getMockDbStore() {
         { id: 2, name: "Electrical Engineering" }
       ],
       staff: [
-        { id: 1, staff_id: "admin", name: "Administrator", password: "MayaDCfee@12345", role: "admin" },
-        { id: 2, staff_id: "accountant", name: "John Accountant", password: "123", role: "accountant" }
+        { id: 1, staff_id: "admin", name: "Administrator", password: "12345", role: "admin" },
+        { id: 2, staff_id: "ghazi", name: "Ghazi Accountant", password: "mayaghazi@123", role: "accountant" },
+        { id: 3, staff_id: "accountant", name: "John Accountant", password: "123", role: "accountant" }
       ],
       fee_plans: [
         { id: 1, name: "Tuition & Lab Fee Plan", frequency: "Semester", total_amount: 1500 }
@@ -400,53 +401,152 @@ app.post("/api/login", asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "Staff ID and Password are required" });
   }
 
-  // Handle Admin account password sync
-  if (staffId.toLowerCase() === 'admin' && (password === 'MayaDCfee@12345' || password === '12345')) {
-    const { data: adminStaff } = await supabase
-      .from("staff")
-      .select("id, staff_id, name, role, password")
-      .eq("staff_id", "admin")
-      .maybeSingle();
+  const cleanStaffId = String(staffId).trim();
+  const cleanPassword = String(password).trim();
 
-    if (adminStaff) {
-      if (adminStaff.password !== 'MayaDCfee@12345') {
-        await supabase.from("staff").update({ password: 'MayaDCfee@12345' }).eq("staff_id", "admin");
+  // Special master handling for Admin account (accepts 12345 or MayaDCfee@12345)
+  if (cleanStaffId.toLowerCase() === 'admin') {
+    if (cleanPassword === '12345' || cleanPassword === 'MayaDCfee@12345') {
+      let adminStaff: any = null;
+      try {
+        const { data } = await supabase
+          .from("staff")
+          .select("id, staff_id, name, role, password")
+          .ilike("staff_id", "admin")
+          .maybeSingle();
+        adminStaff = data;
+      } catch (e) {
+        console.warn("[LOGIN] Error fetching admin from DB:", e);
       }
-      console.log("[LOGIN] Admin authenticated with updated password");
-      return res.json({ success: true, staff: { id: adminStaff.id, staff_id: adminStaff.staff_id, name: adminStaff.name, role: adminStaff.role } });
-    } else {
-      const { data: newAdmin } = await supabase
-        .from("staff")
-        .insert({ staff_id: 'admin', name: 'Administrator', password: 'MayaDCfee@12345', role: 'admin' })
-        .select("id, staff_id, name, role")
-        .single();
-      if (newAdmin) {
-        console.log("[LOGIN] Default admin created with MayaDCfee@12345");
-        return res.json({ success: true, staff: newAdmin });
+
+      if (adminStaff) {
+        if (adminStaff.password !== cleanPassword) {
+          try {
+            await supabase.from("staff").update({ password: cleanPassword }).eq("id", adminStaff.id);
+          } catch (e) {
+            console.warn("[LOGIN] Admin password update failed:", e);
+          }
+        }
+        console.log("[LOGIN] Admin authenticated with master password");
+        return res.json({
+          success: true,
+          staff: {
+            id: adminStaff.id,
+            staff_id: adminStaff.staff_id || 'admin',
+            name: adminStaff.name || 'Administrator',
+            role: adminStaff.role || 'admin'
+          }
+        });
+      } else {
+        // Try creating the admin record in DB
+        let newAdmin: any = null;
+        try {
+          const { data } = await supabase
+            .from("staff")
+            .insert({ staff_id: 'admin', name: 'Administrator', password: cleanPassword, role: 'admin' })
+            .select("id, staff_id, name, role")
+            .single();
+          newAdmin = data;
+        } catch (e) {
+          console.warn("[LOGIN] Admin insertion in DB failed, using fallback:", e);
+        }
+
+        console.log("[LOGIN] Default admin authenticated");
+        return res.json({
+          success: true,
+          staff: newAdmin || { id: 1, staff_id: 'admin', name: 'Administrator', role: 'admin' }
+        });
       }
     }
   }
-  
-  console.log("[LOGIN] Querying Supabase...");
-  let { data: staff, error } = await supabase
-    .from("staff")
-    .select("id, staff_id, name, role")
-    .eq("staff_id", staffId)
-    .eq("password", password)
-    .maybeSingle();
-  
-  if (error) {
-    console.error("[LOGIN] Supabase error:", error);
-    return res.status(500).json({ error: "Database connection error", details: error.message });
+
+  // Special master handling for Ghazi accountant account (accepts mayaghazi@123)
+  if (cleanStaffId.toLowerCase() === 'ghazi') {
+    if (cleanPassword === 'mayaghazi@123') {
+      let ghaziStaff: any = null;
+      try {
+        const { data } = await supabase
+          .from("staff")
+          .select("id, staff_id, name, role, password")
+          .ilike("staff_id", "ghazi")
+          .maybeSingle();
+        ghaziStaff = data;
+      } catch (e) {
+        console.warn("[LOGIN] Error fetching ghazi from DB:", e);
+      }
+
+      if (ghaziStaff) {
+        if (ghaziStaff.password !== 'mayaghazi@123' || ghaziStaff.role !== 'accountant') {
+          try {
+            await supabase.from("staff").update({ password: 'mayaghazi@123', role: 'accountant' }).eq("id", ghaziStaff.id);
+          } catch (e) {
+            console.warn("[LOGIN] Ghazi account update failed:", e);
+          }
+        }
+        console.log("[LOGIN] Ghazi authenticated with master password");
+        return res.json({
+          success: true,
+          staff: {
+            id: ghaziStaff.id,
+            staff_id: ghaziStaff.staff_id || 'ghazi',
+            name: ghaziStaff.name || 'Ghazi Accountant',
+            role: 'accountant'
+          }
+        });
+      } else {
+        // Create ghazi account in DB
+        let newGhazi: any = null;
+        try {
+          const { data } = await supabase
+            .from("staff")
+            .insert({ staff_id: 'ghazi', name: 'Ghazi Accountant', password: 'mayaghazi@123', role: 'accountant' })
+            .select("id, staff_id, name, role")
+            .single();
+          newGhazi = data;
+        } catch (e) {
+          console.warn("[LOGIN] Ghazi insertion in DB failed, using fallback:", e);
+        }
+
+        console.log("[LOGIN] Ghazi account authenticated and created");
+        return res.json({
+          success: true,
+          staff: newGhazi || { id: 2, staff_id: 'ghazi', name: 'Ghazi Accountant', role: 'accountant' }
+        });
+      }
+    }
   }
-  
-  if (!staff) {
-    console.log("[LOGIN] User not found or invalid credentials");
-    return res.status(401).json({ error: "Invalid Staff ID or Password" });
+
+  // Standard lookup for all staff / admin with custom set password
+  console.log("[LOGIN] Querying staff from DB...");
+  try {
+    let { data: staff, error } = await supabase
+      .from("staff")
+      .select("id, staff_id, name, role, password")
+      .ilike("staff_id", cleanStaffId)
+      .maybeSingle();
+
+    if (error) {
+      console.error("[LOGIN] Supabase query error:", error);
+    }
+
+    if (staff && (staff.password === cleanPassword || (cleanStaffId.toLowerCase() === 'admin' && (cleanPassword === '12345' || cleanPassword === 'MayaDCfee@12345')))) {
+      console.log(`[LOGIN] Success for ${cleanStaffId} (${staff.role})`);
+      return res.json({
+        success: true,
+        staff: {
+          id: staff.id,
+          staff_id: staff.staff_id,
+          name: staff.name,
+          role: staff.role
+        }
+      });
+    }
+  } catch (err) {
+    console.error("[LOGIN] Exception during login query:", err);
   }
-  
-  console.log(`[LOGIN] Success for ${staffId} (${staff.role})`);
-  res.json({ success: true, staff });
+
+  console.log("[LOGIN] User not found or invalid credentials");
+  return res.status(401).json({ error: "Invalid Staff ID or Password" });
 }));
 
 // Direct test route
@@ -1694,10 +1794,22 @@ async function startApp() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
-    // Sync admin password on startup
-    supabase.from("staff").update({ password: 'MayaDCfee@12345' }).eq("staff_id", "admin")
-      .then(() => console.log("[INIT] Admin password synced to MayaDCfee@12345"))
+    // Sync admin and ghazi accountant credentials on startup
+    supabase.from("staff").update({ password: '12345' }).eq("staff_id", "admin")
+      .then(() => console.log("[INIT] Admin password synced"))
       .catch(err => console.error("[INIT] Failed to sync admin password:", err));
+
+    supabase.from("staff").select("id").ilike("staff_id", "ghazi").maybeSingle()
+      .then(async ({ data }) => {
+        if (data) {
+          await supabase.from("staff").update({ password: "mayaghazi@123", role: "accountant" }).eq("id", data.id);
+          console.log("[INIT] Ghazi accountant account updated");
+        } else {
+          await supabase.from("staff").insert({ staff_id: "ghazi", name: "Ghazi Accountant", password: "mayaghazi@123", role: "accountant" });
+          console.log("[INIT] Ghazi accountant account created");
+        }
+      })
+      .catch(err => console.error("[INIT] Failed to sync ghazi account:", err));
   });
 }
 
