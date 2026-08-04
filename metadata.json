@@ -1,5 +1,6 @@
 {
-  "name": "Maya 2",
+  "name": "MAYA GROUP OF INSTITUTIONS",
   "description": "A comprehensive fee management software for educational institutions featuring student enrollment, fee structure planning, automated billing, and financial reporting.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dcfeepay-cache-v1';
+const CACHE_NAME = 'maya-group-cache-v2';
 const urlsToCache = [
   '/',
   '/manifest.json',

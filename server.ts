@@ -1154,7 +1154,7 @@ apiRouter.get("/download-apk", (req, res) => {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DCfeePay - Maya Group Mobile App Installer</title>
+  <title>MAYA GROUP OF INSTITUTIONS - Mobile App Installer</title>
   <link rel="manifest" href="/manifest.json" />
   <link rel="icon" href="/api/app-icon" />
   <script src="https://cdn.tailwindcss.com"></script>
@@ -1166,7 +1166,7 @@ apiRouter.get("/download-apk", (req, res) => {
     </div>
     <div>
       <h1 class="text-xl font-black text-white">MAYA GROUP OF INSTITUTIONS</h1>
-      <p class="text-xs text-emerald-400 font-bold uppercase tracking-wider mt-1">DCfeePay Official Mobile Application</p>
+      <p class="text-xs text-emerald-400 font-bold uppercase tracking-wider mt-1">Official Mobile Application</p>
     </div>
     <div class="bg-slate-900/80 rounded-2xl p-4 text-left border border-slate-700/80 space-y-3">
       <div class="flex items-start gap-3">
@@ -1179,12 +1179,12 @@ apiRouter.get("/download-apk", (req, res) => {
       </div>
       <div class="flex items-start gap-3">
         <span class="w-6 h-6 rounded-full bg-emerald-500 text-slate-950 font-black text-xs flex items-center justify-center shrink-0">3</span>
-        <p class="text-xs text-slate-300">Launch <strong>DCfeePay</strong> instantly from your mobile home screen!</p>
+        <p class="text-xs text-slate-300">Launch <strong>MAYA GROUP OF INSTITUTIONS</strong> instantly from your mobile home screen!</p>
       </div>
     </div>
     <div class="pt-2">
       <a href="/" class="block w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg transition-all">
-        Open DCfeePay Mobile App Now
+        Open Mobile App Now
       </a>
     </div>
     <p class="text-[10px] text-slate-400 font-semibold">
