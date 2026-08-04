@@ -1149,25 +1149,27 @@ Return a valid JSON array of objects.`
   }
 
   // Intelligent matching & dummy text enrichment against student directory
-  const matchedRecords = extractedRows.map((row: any, index: number) => {
-    const rawIdentifier = String(row.student_identifier || '').trim();
+  const matchedRecords = [];
+  for (let index = 0; index < extractedRows.length; index++) {
+    const row = extractedRows[index];
+    const rawIdentifier = String(row.student_identifier || '').trim() || 'Student';
     const cleanLowerIdent = rawIdentifier.toLowerCase();
 
     // Match by roll_no
-    let matchedStudent = studentsList.find(s => 
+    let matchedStudent = studentsList.find((s: any) => 
       s.roll_no && s.roll_no.trim().toLowerCase() === cleanLowerIdent
     );
 
     // Match by student name
     if (!matchedStudent) {
-      matchedStudent = studentsList.find(s => 
+      matchedStudent = studentsList.find((s: any) => 
         s.name && (s.name.trim().toLowerCase() === cleanLowerIdent || cleanLowerIdent.includes(s.name.trim().toLowerCase()))
       );
     }
 
     // Partial roll_no match
     if (!matchedStudent && rawIdentifier.length >= 3) {
-      matchedStudent = studentsList.find(s => 
+      matchedStudent = studentsList.find((s: any) => 
         s.roll_no && s.roll_no.toLowerCase().includes(cleanLowerIdent)
       );
     }
@@ -1178,6 +1180,25 @@ Return a valid JSON array of objects.`
       : (matchedStudent && matchedStudent.roll_no 
           ? matchedStudent.roll_no 
           : `REG-2026-${Math.floor(1000 + Math.random() * 9000)}`);
+
+    if (!matchedStudent && rawIdentifier) {
+      try {
+        const { data: newSt } = await supabase.from("students").insert({
+          name: rawIdentifier,
+          roll_no: finalRollNo,
+          phone: '',
+          guardian_name: 'Parent / Guardian',
+          created_at: new Date().toISOString()
+        }).select().single();
+
+        if (newSt) {
+          matchedStudent = newSt;
+          studentsList.push(newSt);
+        }
+      } catch (err) {
+        console.warn("[PDF AUTO STUDENT CREATE ERR]", err);
+      }
+    }
 
     const rawTxn = row.transaction_id ? String(row.transaction_id).trim() : '';
     let inferredPaymentMode = row.payment_mode || '';
@@ -1196,7 +1217,7 @@ Return a valid JSON array of objects.`
     const finalTxnId = rawTxn || (inferredPaymentMode === 'UPI' ? `UPI_REF_${Math.floor(100000 + Math.random() * 900000)}` : `CASH_REC_${Math.floor(1000 + Math.random() * 9000)}`);
     const finalRemarks = row.fee_head_or_notes || 'Tuition Fee Collection';
 
-    return {
+    matchedRecords.push({
       id: `extracted_${index}_${Date.now()}`,
       raw_identifier: rawIdentifier,
       matched_student_id: matchedStudent ? matchedStudent.id : null,
@@ -1208,8 +1229,8 @@ Return a valid JSON array of objects.`
       transaction_date: row.transaction_date || new Date().toISOString().split('T')[0],
       fee_head_or_notes: finalRemarks,
       academic_term: '2026-27'
-    };
-  });
+    });
+  }
 
   res.json({
     success: true,
@@ -1286,6 +1307,22 @@ apiRouter.put("/transactions/:id", asyncHandler(async (req, res) => {
 
   if (error) return res.status(400).json({ error: "Update failed", message: error.message });
   res.json({ success: true });
+}));
+
+apiRouter.delete("/transactions/clear-all", asyncHandler(async (req, res) => {
+  const { error, count } = await supabase.from("transactions").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true, message: "All financial collection transaction records deleted successfully." });
+}));
+
+apiRouter.post("/transactions/delete-bulk", asyncHandler(async (req, res) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: "INVALID_PAYLOAD", message: "ids array is required." });
+  }
+  const { error } = await supabase.from("transactions").delete().in("id", ids);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true, count: ids.length, message: `Successfully deleted ${ids.length} collection records.` });
 }));
 
 apiRouter.delete("/transactions/:id", asyncHandler(async (req, res) => {

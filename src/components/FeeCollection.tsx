@@ -245,27 +245,62 @@ export default function FeeCollection() {
   };
 
   const handleBulkImportPdfRecords = async () => {
-    const recordsToImport = parsedPdfRecords.filter(r => selectedPdfRowIds.has(r.id) && r.matched_student_id);
+    const selectedRecords = parsedPdfRecords.filter(r => selectedPdfRowIds.has(r.id));
 
-    if (recordsToImport.length === 0) {
-      alert('Please select at least one valid record with a matched student to import.');
+    if (selectedRecords.length === 0) {
+      alert('Please select at least one valid record to import.');
       return;
     }
 
     setIsImportingPdfRecords(true);
-    setPdfImportStatus('Importing financial collection records to database...');
-
-    const txPayloads = recordsToImport.map((r, idx) => ({
-      student_id: r.matched_student_id,
-      amount: Number(r.amount) || 0,
-      payment_mode: r.payment_mode || 'Cash',
-      transaction_id: r.transaction_id || `PDF_TXN_${Date.now()}_${idx + 1}`,
-      academic_term: r.academic_term || '2026-27',
-      transaction_date: r.transaction_date || format(new Date(), 'yyyy-MM-dd'),
-      bank_account: ''
-    }));
+    setPdfImportStatus('Preparing financial collection records for import...');
 
     try {
+      // Ensure all selected records have a valid student_id
+      const recordsToImport = [];
+      for (const r of selectedRecords) {
+        let stId = r.matched_student_id;
+        if (!stId) {
+          try {
+            const stRes = await fetch('/api/students', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name: r.matched_student_name || r.raw_identifier || 'Student',
+                roll_no: r.matched_roll_no || `REG-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+                guardian_name: 'Parent / Guardian',
+                phone: ''
+              })
+            });
+            const stData = await stRes.json();
+            if (stData.success && stData.student?.id) {
+              stId = stData.student.id;
+            }
+          } catch (stErr) {
+            console.warn('Auto student creation fallback error:', stErr);
+          }
+        }
+        if (stId) {
+          recordsToImport.push({ ...r, matched_student_id: stId });
+        }
+      }
+
+      if (recordsToImport.length === 0) {
+        throw new Error('Unable to resolve student IDs for the selected records.');
+      }
+
+      setPdfImportStatus(`Importing ${recordsToImport.length} financial collection records to database...`);
+
+      const txPayloads = recordsToImport.map((r, idx) => ({
+        student_id: r.matched_student_id,
+        amount: Number(r.amount) || 0,
+        payment_mode: r.payment_mode || 'Cash',
+        transaction_id: r.transaction_id || `PDF_TXN_${Date.now()}_${idx + 1}`,
+        academic_term: r.academic_term || '2026-27',
+        transaction_date: r.transaction_date || format(new Date(), 'yyyy-MM-dd'),
+        bank_account: ''
+      }));
+
       const res = await fetch('/api/transactions/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -857,6 +892,92 @@ export default function FeeCollection() {
   const [showAnalytics, setShowAnalytics] = useState(true);
   const [chartMetric, setChartMetric] = useState<'daily' | 'mode'>('daily');
   const [heatmapMonth, setHeatmapMonth] = useState<string>(format(new Date(), 'yyyy-MM'));
+
+  // Transaction Row Selection & Bulk / Clear All Deletion State
+  const [selectedTxRowIds, setSelectedTxRowIds] = useState<Set<number>>(new Set());
+  const [isClearAllTxModalOpen, setIsClearAllTxModalOpen] = useState(false);
+  const [isDeletingTxs, setIsDeletingTxs] = useState(false);
+
+  const handleToggleSelectAllTxs = () => {
+    if (selectedTxRowIds.size === filteredRecentTxs.length && filteredRecentTxs.length > 0) {
+      setSelectedTxRowIds(new Set());
+    } else {
+      setSelectedTxRowIds(new Set(filteredRecentTxs.map(t => Number(t.id))));
+    }
+  };
+
+  const handleToggleTxRow = (id: number) => {
+    setSelectedTxRowIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleDeleteSingleTx = async (id: number, txLabel?: string) => {
+    if (!confirm(`Are you sure you want to delete this collection record (${txLabel || `#DC-${1000 + id}`})?`)) return;
+    try {
+      const res = await fetch(`/api/transactions/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setSelectedTxRowIds(prev => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+        loadRecentTransactions();
+      } else {
+        const err = await res.json();
+        alert(err.message || 'Failed to delete transaction.');
+      }
+    } catch (err: any) {
+      alert('Error deleting transaction: ' + err.message);
+    }
+  };
+
+  const handleDeleteSelectedTxs = async () => {
+    if (selectedTxRowIds.size === 0) return;
+    if (!confirm(`Are you sure you want to permanently delete ${selectedTxRowIds.size} selected financial collection record(s)?`)) return;
+    
+    setIsDeletingTxs(true);
+    try {
+      const res = await fetch('/api/transactions/delete-bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedTxRowIds) })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSelectedTxRowIds(new Set());
+        loadRecentTransactions();
+      } else {
+        alert(data.message || 'Failed to delete selected records.');
+      }
+    } catch (err: any) {
+      alert('Error deleting records: ' + err.message);
+    } finally {
+      setIsDeletingTxs(false);
+    }
+  };
+
+  const handleClearAllTransactions = async () => {
+    setIsDeletingTxs(true);
+    try {
+      const res = await fetch('/api/transactions/clear-all', { method: 'DELETE' });
+      const data = await res.json();
+      if (res.ok) {
+        setIsClearAllTxModalOpen(false);
+        setSelectedTxRowIds(new Set());
+        loadRecentTransactions();
+      } else {
+        alert(data.message || 'Failed to clear collection records.');
+      }
+    } catch (err: any) {
+      alert('Error clearing collection records: ' + err.message);
+    } finally {
+      setIsDeletingTxs(false);
+    }
+  };
 
   // Export Recent Transactions to Excel (.xlsx)
   const exportRecentTransactionsExcel = () => {
@@ -1579,6 +1700,16 @@ export default function FeeCollection() {
               <span>Upload PDF Sheet</span>
             </button>
 
+            {/* Delete / Clear All Data */}
+            <button 
+              onClick={() => setIsClearAllTxModalOpen(true)}
+              className="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+              title="Delete all financial collections data uploaded via Excel/PDF or recorded in system"
+            >
+              <Trash2 size={15} />
+              <span>Delete All Data</span>
+            </button>
+
             {/* Toggle Analytics Card */}
             <button 
               onClick={() => setShowAnalytics(!showAnalytics)}
@@ -1919,106 +2050,153 @@ export default function FeeCollection() {
           </div>
         </div>
 
-        {/* Filter summary status badge if any filter active */}
-        {(historyStartDate || historyEndDate || historySearch) && (
-          <div className="flex items-center justify-between text-xs text-slate-600 bg-blue-50/60 px-3.5 py-2 rounded-xl border border-blue-100">
-            <span className="font-medium">
-              Showing <strong className="font-bold text-blue-900">{filteredRecentTxs.length}</strong> transaction{filteredRecentTxs.length !== 1 ? 's' : ''}
-              {historyStartDate && historyEndDate ? ` from ${historyStartDate} to ${historyEndDate}` : (historyStartDate ? ` from ${historyStartDate}` : (historyEndDate ? ` up to ${historyEndDate}` : ''))}
-              {historySearch ? ` matching "${historySearch}"` : ''}
-            </span>
-            <button
-              onClick={() => {
-                handlePresetChange('all');
-                setHistorySearch('');
-              }}
-              className="text-blue-700 hover:text-blue-900 underline font-bold text-[11px]"
-            >
-              Reset Filters
-            </button>
-          </div>
-        )}
+        {/* Filter summary status badge & Selection Actions */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          {(historyStartDate || historyEndDate || historySearch) ? (
+            <div className="flex items-center justify-between text-xs text-slate-600 bg-blue-50/60 px-3.5 py-2 rounded-xl border border-blue-100 flex-1">
+              <span className="font-medium">
+                Showing <strong className="font-bold text-blue-900">{filteredRecentTxs.length}</strong> transaction{filteredRecentTxs.length !== 1 ? 's' : ''}
+                {historyStartDate && historyEndDate ? ` from ${historyStartDate} to ${historyEndDate}` : (historyStartDate ? ` from ${historyStartDate}` : (historyEndDate ? ` up to ${historyEndDate}` : ''))}
+                {historySearch ? ` matching "${historySearch}"` : ''}
+              </span>
+              <button
+                onClick={() => {
+                  handlePresetChange('all');
+                  setHistorySearch('');
+                }}
+                className="text-blue-700 hover:text-blue-900 underline font-bold text-[11px]"
+              >
+                Reset Filters
+              </button>
+            </div>
+          ) : <div />}
+
+          {/* Bulk Selection Actions Bar */}
+          {selectedTxRowIds.size > 0 && (
+            <div className="flex items-center gap-2 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl">
+              <span className="text-xs font-bold text-rose-900">
+                {selectedTxRowIds.size} Selected
+              </span>
+              <button
+                type="button"
+                onClick={handleDeleteSelectedTxs}
+                disabled={isDeletingTxs}
+                className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition-all shadow-sm"
+              >
+                <Trash2 size={13} />
+                <span>Delete Selected ({selectedTxRowIds.size})</span>
+              </button>
+            </div>
+          )}
+        </div>
 
         <div className="overflow-x-auto border border-slate-200 rounded-2xl">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-900 text-white text-xs">
+                <th className="py-3 px-3 text-center w-10">
+                  <input 
+                    type="checkbox"
+                    checked={filteredRecentTxs.length > 0 && selectedTxRowIds.size === filteredRecentTxs.length}
+                    onChange={handleToggleSelectAllTxs}
+                    className="rounded border-slate-700 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                  />
+                </th>
                 <th className="py-3 px-4 font-semibold">Receipt / ID</th>
                 <th className="py-3 px-4 font-semibold">Date & Time</th>
                 <th className="py-3 px-4 font-semibold">Student</th>
                 <th className="py-3 px-4 font-semibold">Txn ID / Mode</th>
                 <th className="py-3 px-4 font-semibold">Term</th>
                 <th className="py-3 px-4 font-semibold text-right">Amount</th>
-                <th className="py-3 px-4 font-semibold text-center w-28">Action</th>
+                <th className="py-3 px-4 font-semibold text-center w-36">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
-              {filteredRecentTxs.slice(0, (historyStartDate || historyEndDate || historySearch) ? 100 : 25).map((tx) => (
-                <tr key={tx.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="py-3 px-4 font-mono font-bold text-slate-900">
-                    <div>#DC-{1000 + tx.id}</div>
-                    {tx.is_edited && (
-                      <span className="inline-block mt-0.5 px-1.5 py-0.5 bg-amber-500 text-white rounded text-[9px] font-bold uppercase tracking-wider">
-                        Edited by {tx.edited_by || 'Accountant'}
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-3 px-4 text-slate-600 font-medium">
-                    {formatTxDate(tx.transaction_date || tx.created_at)}
-                  </td>
-                  <td className="py-3 px-4">
-                    <p className="font-bold text-slate-800">{cleanVal(tx.student_name || tx.student?.name || 'Student')}</p>
-                    <p className="text-[10px] text-slate-400 font-mono">{cleanVal(tx.roll_no || tx.student?.roll_no || '')}</p>
-                  </td>
-                  <td className="py-3 px-4">
-                    <p className="font-mono text-slate-700 font-semibold">{cleanVal(tx.transaction_id || 'N/A')}</p>
-                    <span className="inline-block px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-bold mt-0.5">
-                      {cleanVal(tx.payment_mode || 'UPI Digital')}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-slate-600">
-                    {cleanVal(tx.academic_term || '-')}
-                  </td>
-                  <td className="py-3 px-4 text-right font-black text-emerald-600 text-sm">
-                    ₹{Number(tx.amount || 0).toLocaleString()}
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    <div className="flex items-center justify-center gap-1.5">
-                      <button 
-                        onClick={() => viewHistoryReceipt(tx)}
-                        className="bg-[#17A2B8] hover:bg-[#138496] text-white px-2.5 py-1.2 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1"
-                        title="Print / View Receipt"
-                      >
-                        <Printer size={12} />
-                        Receipt
-                      </button>
-
-                      <button 
-                        onClick={() => startEditTx(tx)}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.2 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1"
-                        title="Edit Transaction"
-                      >
-                        <Edit3 size={12} />
-                        Edit
-                      </button>
-
+              {filteredRecentTxs.slice(0, (historyStartDate || historyEndDate || historySearch) ? 100 : 25).map((tx) => {
+                const isSelected = selectedTxRowIds.has(Number(tx.id));
+                return (
+                  <tr key={tx.id} className={cn("hover:bg-slate-50 transition-colors", isSelected && "bg-rose-50/40")}>
+                    <td className="py-3 px-3 text-center">
+                      <input 
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => handleToggleTxRow(Number(tx.id))}
+                        className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                      />
+                    </td>
+                    <td className="py-3 px-4 font-mono font-bold text-slate-900">
+                      <div>#DC-{1000 + tx.id}</div>
                       {tx.is_edited && (
-                        <button 
-                          onClick={() => setViewingAuditTx(tx)}
-                          className="bg-amber-500 hover:bg-amber-600 text-white px-2 py-1.2 rounded-lg text-[10px] font-bold transition-all shadow-sm flex items-center justify-center gap-1"
-                          title="View Before & After Editing"
-                        >
-                          <Clock size={11} />
-                          Before & After
-                        </button>
+                        <span className="inline-block mt-0.5 px-1.5 py-0.5 bg-amber-500 text-white rounded text-[9px] font-bold uppercase tracking-wider">
+                          Edited by {tx.edited_by || 'Accountant'}
+                        </span>
                       )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="py-3 px-4 text-slate-600 font-medium">
+                      {formatTxDate(tx.transaction_date || tx.created_at)}
+                    </td>
+                    <td className="py-3 px-4">
+                      <p className="font-bold text-slate-800">{cleanVal(tx.student_name || tx.student?.name || 'Student')}</p>
+                      <p className="text-[10px] text-slate-400 font-mono">{cleanVal(tx.roll_no || tx.student?.roll_no || '')}</p>
+                    </td>
+                    <td className="py-3 px-4">
+                      <p className="font-mono text-slate-700 font-semibold">{cleanVal(tx.transaction_id || 'N/A')}</p>
+                      <span className="inline-block px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-bold mt-0.5">
+                        {cleanVal(tx.payment_mode || 'UPI Digital')}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-slate-600">
+                      {cleanVal(tx.academic_term || '-')}
+                    </td>
+                    <td className="py-3 px-4 text-right font-black text-emerald-600 text-sm">
+                      ₹{Number(tx.amount || 0).toLocaleString()}
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button 
+                          onClick={() => viewHistoryReceipt(tx)}
+                          className="bg-[#17A2B8] hover:bg-[#138496] text-white px-2 py-1.2 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1"
+                          title="Print / View Receipt"
+                        >
+                          <Printer size={12} />
+                          Receipt
+                        </button>
+
+                        <button 
+                          onClick={() => startEditTx(tx)}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-1.2 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1"
+                          title="Edit Transaction"
+                        >
+                          <Edit3 size={12} />
+                          Edit
+                        </button>
+
+                        <button 
+                          onClick={() => handleDeleteSingleTx(Number(tx.id), `#DC-${1000 + tx.id}`)}
+                          className="bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200 hover:border-rose-600 px-2 py-1.2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1"
+                          title="Delete Transaction Record"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+
+                        {tx.is_edited && (
+                          <button 
+                            onClick={() => setViewingAuditTx(tx)}
+                            className="bg-amber-500 hover:bg-amber-600 text-white px-2 py-1.2 rounded-lg text-[10px] font-bold transition-all shadow-sm flex items-center justify-center gap-1"
+                            title="View Before & After Editing"
+                          >
+                            <Clock size={11} />
+                            Audit
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
               {filteredRecentTxs.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400 font-medium">
+                  <td colSpan={8} className="py-12 text-center text-slate-400 font-medium">
                     No recent transactions recorded yet.
                   </td>
                 </tr>
@@ -2605,6 +2783,71 @@ export default function FeeCollection() {
                     )}
                   </button>
                 )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Clear All Transactions Confirmation Modal */}
+      <AnimatePresence>
+        {isClearAllTxModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => !isDeletingTxs && setIsClearAllTxModalOpen(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden p-6 space-y-5"
+            >
+              <div className="w-14 h-14 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+                <AlertTriangle size={30} />
+              </div>
+
+              <div className="text-center space-y-2">
+                <h3 className="text-xl font-black text-slate-900">Delete All Financial Collections Data?</h3>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Are you sure you want to permanently delete <strong>ALL ({recentTxs.length})</strong> financial collection records uploaded via Excel / PDF sheets or recorded in the system?
+                </p>
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-[11px] font-bold text-rose-900 text-left flex items-start gap-2 mt-3">
+                  <AlertCircle size={16} className="text-rose-600 shrink-0 mt-0.5" />
+                  <span>Warning: This action will purge all collection history records, payment receipts, and fee collection totals. This process is permanent.</span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button 
+                  type="button"
+                  disabled={isDeletingTxs}
+                  onClick={() => setIsClearAllTxModalOpen(false)}
+                  className="flex-1 py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="button"
+                  disabled={isDeletingTxs}
+                  onClick={handleClearAllTransactions}
+                  className="flex-1 py-3 px-4 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black transition-all shadow-lg shadow-rose-600/30 flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isDeletingTxs ? (
+                    <>
+                      <RefreshCw size={15} className="animate-spin" />
+                      <span>Deleting Data...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 size={16} />
+                      <span>Yes, Delete All Data</span>
+                    </>
+                  )}
+                </button>
               </div>
             </motion.div>
           </div>
