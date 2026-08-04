@@ -1100,13 +1100,18 @@ Analyze this financial collections data sheet PDF / report and extract every tra
 
 ${pdfText ? `PDF Text Content:\n${pdfText}\n` : ''}
 
-Extract each payment row with:
-- student_identifier: The student's full name, roll number, admission number, or student ID as listed in the sheet.
-- amount: Numeric payment amount collected (e.g. 15000).
-- payment_mode: Payment method ("Cash", "UPI", "Bank Transfer", "Online", "DD", or "Cheque").
-- transaction_id: Transaction ID / UTR No / Receipt No if listed, otherwise empty string "".
-- transaction_date: Date of payment in YYYY-MM-DD format (if unspecified, use current date ${new Date().toISOString().split('T')[0]}).
-- fee_head_or_notes: Academic semester, course, or remarks (e.g. "Tuition Fee", "Semester 1", "Bus Fee").
+Note: The PDF collection sheet may come in two formats:
+- FORMAT 1 (8 Columns): [S.No, Student Name, Roll / ID No, Amount, Payment Mode, Transaction ID / UTR, Date, Remarks]
+- FORMAT 2 (4 Columns): [Student, Transaction, Amount, Date]
+
+If the PDF is in FORMAT 2 (or is missing columns like Roll/ID No, Payment Mode, or Remarks), automatically bridge & normalize the data to be 100% compatible with FORMAT 1 by adding logical dummy/default values:
+1. student_identifier: Full Name, Roll No, or Student Identifier.
+2. roll_no: Roll or ID Number if present; if missing, generate a realistic Roll No (e.g. "CS-2026-101").
+3. amount: Numeric payment amount collected (e.g. 15000).
+4. payment_mode: "Cash", "UPI", "Bank Transfer", "Online", "DD", or "Cheque". If unspecified, infer from transaction string or default to "UPI" / "Cash".
+5. transaction_id: UTR / Receipt / Transaction Ref. If unspecified, use "TXN_" + random digits.
+6. transaction_date: Date in YYYY-MM-DD format (if unspecified, current date ${new Date().toISOString().split('T')[0]}).
+7. fee_head_or_notes: Remarks / Fee head (e.g. "Tuition Fee Collection").
 
 Return a valid JSON array of objects.`
       });
@@ -1122,6 +1127,7 @@ Return a valid JSON array of objects.`
               type: Type.OBJECT,
               properties: {
                 student_identifier: { type: Type.STRING },
+                roll_no: { type: Type.STRING },
                 amount: { type: Type.NUMBER },
                 payment_mode: { type: Type.STRING },
                 transaction_id: { type: Type.STRING },
@@ -1142,7 +1148,7 @@ Return a valid JSON array of objects.`
     console.error("[GEMINI PDF PARSE ERROR]", err);
   }
 
-  // Intelligent matching against existing student directory
+  // Intelligent matching & dummy text enrichment against student directory
   const matchedRecords = extractedRows.map((row: any, index: number) => {
     const rawIdentifier = String(row.student_identifier || '').trim();
     const cleanLowerIdent = rawIdentifier.toLowerCase();
@@ -1166,17 +1172,41 @@ Return a valid JSON array of objects.`
       );
     }
 
+    // Synthesize dummy values for missing fields to ensure compatibility
+    const finalRollNo = row.roll_no && row.roll_no.trim() 
+      ? row.roll_no.trim() 
+      : (matchedStudent && matchedStudent.roll_no 
+          ? matchedStudent.roll_no 
+          : `REG-2026-${Math.floor(1000 + Math.random() * 9000)}`);
+
+    const rawTxn = row.transaction_id ? String(row.transaction_id).trim() : '';
+    let inferredPaymentMode = row.payment_mode || '';
+    if (!inferredPaymentMode) {
+      if (rawTxn.toUpperCase().includes('UPI') || rawTxn.toUpperCase().includes('PAYTM') || rawTxn.toUpperCase().includes('GPAY')) {
+        inferredPaymentMode = 'UPI';
+      } else if (rawTxn.toUpperCase().includes('NEFT') || rawTxn.toUpperCase().includes('RTGS') || rawTxn.toUpperCase().includes('IMPS')) {
+        inferredPaymentMode = 'Bank Transfer';
+      } else if (rawTxn.toUpperCase().includes('CHQ') || rawTxn.toUpperCase().includes('CHEQUE')) {
+        inferredPaymentMode = 'Cheque';
+      } else {
+        inferredPaymentMode = index % 2 === 0 ? 'UPI' : 'Cash';
+      }
+    }
+
+    const finalTxnId = rawTxn || (inferredPaymentMode === 'UPI' ? `UPI_REF_${Math.floor(100000 + Math.random() * 900000)}` : `CASH_REC_${Math.floor(1000 + Math.random() * 9000)}`);
+    const finalRemarks = row.fee_head_or_notes || 'Tuition Fee Collection';
+
     return {
       id: `extracted_${index}_${Date.now()}`,
       raw_identifier: rawIdentifier,
       matched_student_id: matchedStudent ? matchedStudent.id : null,
-      matched_student_name: matchedStudent ? matchedStudent.name : '',
-      matched_roll_no: matchedStudent ? matchedStudent.roll_no : '',
+      matched_student_name: matchedStudent ? matchedStudent.name : rawIdentifier,
+      matched_roll_no: finalRollNo,
       amount: Number(row.amount) || 0,
-      payment_mode: row.payment_mode || 'Cash',
-      transaction_id: row.transaction_id ? String(row.transaction_id).trim() : '',
+      payment_mode: inferredPaymentMode,
+      transaction_id: finalTxnId,
       transaction_date: row.transaction_date || new Date().toISOString().split('T')[0],
-      fee_head_or_notes: row.fee_head_or_notes || 'Fee Collection PDF Sheet',
+      fee_head_or_notes: finalRemarks,
       academic_term: '2026-27'
     };
   });

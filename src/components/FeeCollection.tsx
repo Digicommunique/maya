@@ -136,24 +136,25 @@ export default function FeeCollection() {
     }
   };
 
-  const handleDownloadSamplePdf = () => {
+  // Download Sample PDF in Image 1 Format (Detailed 8 Columns)
+  const handleDownloadFormat1Pdf = () => {
     const doc = new jsPDF();
-    doc.setFontSize(18);
-    doc.text("MAYA GROUP OF INSTITUTIONS", 14, 20);
-    doc.setFontSize(12);
-    doc.text("Daily Financial Fee Collections Data Sheet", 14, 28);
-    doc.setFontSize(10);
-    doc.text(`Generated Date: ${format(new Date(), 'yyyy-MM-dd')} | Academic Term: 2026-27`, 14, 34);
+    doc.setFontSize(16);
+    doc.text("MAYA GROUP OF INSTITUTIONS", 14, 18);
+    doc.setFontSize(11);
+    doc.text("Financial Fee Collections Sheet (Image 1 Format - 8 Columns)", 14, 25);
+    doc.setFontSize(9);
+    doc.text(`Generated Date: ${format(new Date(), 'yyyy-MM-dd')} | Academic Term: 2026-27`, 14, 31);
 
     const sampleRows = students.slice(0, 5).map((st, i) => [
       (i + 1).toString(),
       st.name,
-      st.roll_no || `ROLL-00${i+1}`,
+      st.roll_no || `CS-2026-00${i+1}`,
       ((i + 1) * 5000).toString(),
       i % 2 === 0 ? 'UPI' : 'Cash',
       i % 2 === 0 ? `UPI_REF_${Math.floor(100000 + Math.random() * 900000)}` : `CASH_${Math.floor(1000 + Math.random() * 9000)}`,
       format(new Date(), 'yyyy-MM-dd'),
-      'Tuition Fee'
+      'Tuition Fee Collection'
     ]);
 
     if (sampleRows.length === 0) {
@@ -164,14 +165,83 @@ export default function FeeCollection() {
     }
 
     autoTable(doc, {
-      startY: 40,
+      startY: 36,
       head: [["S.No", "Student Name", "Roll / ID No", "Amount (₹)", "Payment Mode", "Transaction ID / UTR", "Date", "Remarks"]],
       body: sampleRows,
       theme: 'grid',
       headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' }
     });
 
-    doc.save(`Sample_Financial_Collections_Sheet_${format(new Date(), 'yyyyMMdd')}.pdf`);
+    doc.save(`Format1_Detailed_Collections_Sheet_${format(new Date(), 'yyyyMMdd')}.pdf`);
+  };
+
+  // Download Sample PDF in Image 2 Format (Simplified 4 Columns)
+  const handleDownloadFormat2Pdf = () => {
+    const doc = new jsPDF();
+    doc.setFontSize(16);
+    doc.text("MAYA GROUP OF INSTITUTIONS", 14, 18);
+    doc.setFontSize(11);
+    doc.text("Fee Collections Data Sheet (Image 2 Format - 4 Columns)", 14, 25);
+    doc.setFontSize(9);
+    doc.text(`Generated Date: ${format(new Date(), 'yyyy-MM-dd')} | Academic Term: 2026-27`, 14, 31);
+
+    const sampleRows = students.slice(0, 5).map((st, i) => [
+      st.name,
+      i % 2 === 0 ? `UPI_REF_${Math.floor(100000 + Math.random() * 900000)}` : `CASH_${Math.floor(1000 + Math.random() * 9000)}`,
+      ((i + 1) * 5000).toString(),
+      format(new Date(), 'yyyy-MM-dd')
+    ]);
+
+    if (sampleRows.length === 0) {
+      sampleRows.push(
+        ["Alice Johnson", "UPI_REF_981234", "15000", format(new Date(), 'yyyy-MM-dd')],
+        ["Bob Smith", "NEFT_887123", "12000", format(new Date(), 'yyyy-MM-dd')]
+      );
+    }
+
+    autoTable(doc, {
+      startY: 36,
+      head: [["Student", "Transaction", "Amount", "Date"]],
+      body: sampleRows,
+      theme: 'grid',
+      headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' }
+    });
+
+    doc.save(`Format2_Simple_Collections_Sheet_${format(new Date(), 'yyyyMMdd')}.pdf`);
+  };
+
+  // Export parsed & dummy-enriched records as standardized Image 1 Format PDF
+  const handleExportConvertedFormat1Pdf = () => {
+    if (parsedPdfRecords.length === 0) return;
+
+    const doc = new jsPDF();
+    doc.setFontSize(16);
+    doc.text("MAYA GROUP OF INSTITUTIONS", 14, 18);
+    doc.setFontSize(11);
+    doc.text("Converted & Enriched Financial Collections Report (Image 1 Standard)", 14, 25);
+    doc.setFontSize(9);
+    doc.text(`Converted Date: ${format(new Date(), 'yyyy-MM-dd HH:mm')} | Total Records: ${parsedPdfRecords.length}`, 14, 31);
+
+    const rows = parsedPdfRecords.map((r, i) => [
+      (i + 1).toString(),
+      r.matched_student_name || r.raw_identifier || 'Unknown Student',
+      r.matched_roll_no || `REG-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+      Number(r.amount).toLocaleString('en-IN'),
+      r.payment_mode || 'Cash',
+      r.transaction_id || `TXN_${Math.floor(100000 + Math.random() * 900000)}`,
+      r.transaction_date || format(new Date(), 'yyyy-MM-dd'),
+      r.fee_head_or_notes || 'Tuition Fee Collection'
+    ]);
+
+    autoTable(doc, {
+      startY: 36,
+      head: [["S.No", "Student Name", "Roll / ID No", "Amount (₹)", "Payment Mode", "Transaction ID / UTR", "Date", "Remarks"]],
+      body: rows,
+      theme: 'grid',
+      headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' }
+    });
+
+    doc.save(`Converted_Format1_Collections_${format(new Date(), 'yyyyMMdd_HHmm')}.pdf`);
   };
 
   const handleBulkImportPdfRecords = async () => {
@@ -2244,24 +2314,36 @@ export default function FeeCollection() {
                     </div>
                   </div>
 
-                  <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-5 flex flex-col justify-between space-y-3">
+                  <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-4 flex flex-col justify-between space-y-3">
                     <div>
-                      <div className="flex items-center gap-1.5 text-amber-800 font-extrabold text-xs uppercase tracking-wider">
+                      <div className="flex items-center gap-1.5 text-amber-900 font-extrabold text-xs uppercase tracking-wider">
                         <FileText size={16} />
-                        <span>Need a Template?</span>
+                        <span>PDF Format Templates</span>
                       </div>
-                      <p className="text-xs text-amber-900/80 mt-1 leading-relaxed">
-                        Download our official pre-formatted Maya Group sample collection PDF data sheet to test uploading.
+                      <p className="text-[11px] text-amber-900/80 mt-1 leading-snug">
+                        Upload either format — missing fields (Roll No, Mode, Remarks) are automatically converted & auto-filled with dummy text!
                       </p>
                     </div>
-                    <button 
-                      type="button"
-                      onClick={handleDownloadSamplePdf}
-                      className="w-full py-2.5 px-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm"
-                    >
-                      <Download size={15} />
-                      <span>Download Sample PDF Sheet</span>
-                    </button>
+                    <div className="space-y-1.5">
+                      <button 
+                        type="button"
+                        onClick={handleDownloadFormat1Pdf}
+                        className="w-full py-2 px-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-[11px] font-extrabold transition-all flex items-center justify-between gap-1 shadow-sm"
+                        title="8 Columns: S.No, Student Name, Roll / ID No, Amount, Payment Mode, Transaction ID, Date, Remarks"
+                      >
+                        <span className="truncate">Download Format 1 (Image 1: 8-Cols)</span>
+                        <Download size={13} className="shrink-0" />
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={handleDownloadFormat2Pdf}
+                        className="w-full py-2 px-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-[11px] font-extrabold transition-all flex items-center justify-between gap-1 shadow-sm"
+                        title="4 Columns: Student, Transaction, Amount, Date"
+                      >
+                        <span className="truncate">Download Format 2 (Image 2: 4-Cols)</span>
+                        <Download size={13} className="shrink-0" />
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -2305,15 +2387,27 @@ export default function FeeCollection() {
                         </span>
                       </div>
 
-                      <div className="relative w-full sm:w-64">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-                        <input 
-                          type="text"
-                          placeholder="Filter extracted items..."
-                          value={pdfSearchQuery}
-                          onChange={e => setPdfSearchQuery(e.target.value)}
-                          className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500"
-                        />
+                      <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <button
+                          type="button"
+                          onClick={handleExportConvertedFormat1Pdf}
+                          className="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm shrink-0"
+                          title="Export extracted data as standardized 8-Column PDF (Image 1 Format)"
+                        >
+                          <Download size={13} />
+                          <span>Export Converted PDF (Image 1)</span>
+                        </button>
+
+                        <div className="relative w-full sm:w-56">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                          <input 
+                            type="text"
+                            placeholder="Filter extracted items..."
+                            value={pdfSearchQuery}
+                            onChange={e => setPdfSearchQuery(e.target.value)}
+                            className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
                       </div>
                     </div>
 
