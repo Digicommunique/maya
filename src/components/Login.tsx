@@ -95,6 +95,7 @@ export default function Login({ onLogin, orgSettings }: LoginProps) {
   };
 
   const orgName = orgSettings?.name || "MAYA GROUP OF INSTITUTIONS";
+  const logoSrc = orgSettings?.logo || "/api/app-icon";
 
   return (
     <div className="min-h-screen bg-slate-100/70 flex flex-col items-center justify-between p-4 py-8 font-sans space-y-6">
@@ -107,7 +108,7 @@ export default function Login({ onLogin, orgSettings }: LoginProps) {
         >
           {/* Logo Badge */}
           <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-lg shadow-emerald-600/10 border border-slate-100 overflow-hidden p-1">
-            <img src="/api/app-icon" alt="Logo" className="w-full h-full object-contain rounded-xl" />
+            <img src={logoSrc} alt="Logo" className="w-full h-full object-contain rounded-xl" />
           </div>
 
           {/* Institutional Title & Subtitles */}
@@ -191,7 +192,7 @@ export default function Login({ onLogin, orgSettings }: LoginProps) {
         >
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 bg-white rounded-xl p-0.5 shrink-0 flex items-center justify-center overflow-hidden border border-emerald-500/30">
-              <img src="/api/app-icon" alt="App Icon" className="w-full h-full object-contain rounded-lg" />
+              <img src={logoSrc} alt="App Icon" className="w-full h-full object-contain rounded-lg" />
             </div>
             <div>
               <h3 className="font-extrabold text-sm text-white flex items-center gap-1.5">
@@ -247,7 +248,7 @@ export default function Login({ onLogin, orgSettings }: LoginProps) {
 
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-white rounded-xl p-0.5 shrink-0 flex items-center justify-center border border-emerald-500/40 shadow-lg">
-                  <img src="/api/app-icon" alt="App Icon" className="w-full h-full object-contain rounded-lg" />
+                  <img src={logoSrc} alt="App Icon" className="w-full h-full object-contain rounded-lg" />
                 </div>
                 <div>
                   <h3 className="font-extrabold text-base text-white">
