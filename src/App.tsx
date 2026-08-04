@@ -102,12 +102,12 @@ export default function App() {
 
   if (!isInitialized) return null;
 
-  const activeTab = location.pathname.split('/')[1] || 'dashboard';
+  const activeTab = location.pathname.split('/')[1] || (user?.role === 'accountant' ? 'collection' : 'dashboard');
 
   const allMenuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'students', label: 'Student Directory', icon: Users },
-    { id: 'collection', label: 'Record Payment', icon: CreditCard },
+    { id: 'collection', label: 'Record Fee Payment', icon: CreditCard },
+    { id: 'students', label: 'Enroll Student', icon: Users },
     { id: 'plans', label: 'Fee Plans', icon: PlusCircle },
     { id: 'reports', label: 'Reports', icon: FileText },
     { id: 'settings', label: 'Settings', icon: SettingsIcon },
@@ -116,13 +116,21 @@ export default function App() {
   const menuItems = allMenuItems.filter(item => {
     if (!user) return false;
     if (user.role === 'accountant') {
-      return ['dashboard', 'collection'].includes(item.id);
+      return ['collection', 'students'].includes(item.id);
     }
     if (user.role === 'staff') {
-      return ['dashboard', 'students', 'collection', 'reports'].includes(item.id);
+      return ['collection', 'students', 'reports'].includes(item.id);
     }
     return true; // Admin sees everything
   });
+
+  // Strict route protection for Accountants
+  if (user && user.role === 'accountant') {
+    const allowedTabs = ['collection', 'students'];
+    if (!allowedTabs.includes(activeTab)) {
+      return <Navigate to="/collection" replace />;
+    }
+  }
 
   return (
     <Routes>
@@ -268,13 +276,13 @@ export default function App() {
                     >
                       <Routes>
                         <Route path="/dashboard" element={<Dashboard setActiveTab={(tab) => navigate(`/${tab}`)} user={user} />} />
-                        <Route path="/students" element={<StudentDirectory />} />
-                        <Route path="/collection" element={<FeeCollection />} />
-                        <Route path="/plans" element={<FeePlans />} />
-                        <Route path="/reports" element={<Reports />} />
-                        <Route path="/settings" element={<Settings />} />
-                        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                        <Route path="/students" element={<StudentDirectory user={user} />} />
+                        <Route path="/collection" element={<FeeCollection user={user} />} />
+                        <Route path="/plans" element={<FeePlans user={user} />} />
+                        <Route path="/reports" element={<Reports user={user} />} />
+                        <Route path="/settings" element={<Settings user={user} />} />
+                        <Route path="/" element={<Navigate to={user?.role === 'accountant' ? "/collection" : "/dashboard"} replace />} />
+                        <Route path="*" element={<Navigate to={user?.role === 'accountant' ? "/collection" : "/dashboard"} replace />} />
                       </Routes>
                     </motion.div>
                   </AnimatePresence>

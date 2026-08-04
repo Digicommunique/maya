@@ -32,7 +32,8 @@ import html2canvas from 'html2canvas';
 import autoTable from 'jspdf-autotable';
 import Receipt from './Receipt';
 
-export default function StudentDirectory() {
+export default function StudentDirectory({ user }: { user?: any }) {
+  const isAccountant = user?.role === 'accountant';
   const [students, setStudents] = useState<Student[]>([]);
   const [plans, setPlans] = useState<FeePlan[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -869,13 +870,15 @@ export default function StudentDirectory() {
                       >
                         <Edit3 size={15} />
                       </button>
-                      <button 
-                        onClick={() => deleteStudent(student.id)}
-                        title="Delete Student"
-                        className="p-1.5 text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      {!isAccountant && (
+                        <button 
+                          onClick={() => deleteStudent(student.id)}
+                          title="Delete Student"
+                          className="p-1.5 text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

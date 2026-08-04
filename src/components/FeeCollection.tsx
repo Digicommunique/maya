@@ -59,7 +59,8 @@ import {
 
 import Receipt from './Receipt';
 
-export default function FeeCollection() {
+export default function FeeCollection({ user }: { user?: any }) {
+  const isAccountant = user?.role === 'accountant';
   const [students, setStudents] = useState<Student[]>([]);
   const [branches, setBranches] = useState<any[]>([]);
   const [semesters, setSemesters] = useState<any[]>([]);
@@ -1700,29 +1701,33 @@ export default function FeeCollection() {
               <span>Upload PDF Sheet</span>
             </button>
 
-            {/* Delete / Clear All Data */}
-            <button 
-              onClick={() => setIsClearAllTxModalOpen(true)}
-              className="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
-              title="Delete all financial collections data uploaded via Excel/PDF or recorded in system"
-            >
-              <Trash2 size={15} />
-              <span>Delete All Data</span>
-            </button>
+            {/* Delete / Clear All Data (Admin Only) */}
+            {!isAccountant && (
+              <button 
+                onClick={() => setIsClearAllTxModalOpen(true)}
+                className="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+                title="Delete all financial collections data uploaded via Excel/PDF or recorded in system"
+              >
+                <Trash2 size={15} />
+                <span>Delete All Data</span>
+              </button>
+            )}
 
-            {/* Toggle Analytics Card */}
-            <button 
-              onClick={() => setShowAnalytics(!showAnalytics)}
-              className={cn(
-                "px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border shadow-sm",
-                showAnalytics 
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200" 
-                  : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-              )}
-            >
-              <BarChart3 size={15} />
-              <span>{showAnalytics ? 'Hide Visual Analytics' : 'Show Charts & Heatmap'}</span>
-            </button>
+            {/* Toggle Analytics Card (Admin/Staff Only) */}
+            {!isAccountant && (
+              <button 
+                onClick={() => setShowAnalytics(!showAnalytics)}
+                className={cn(
+                  "px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border shadow-sm",
+                  showAnalytics 
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200" 
+                    : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                )}
+              >
+                <BarChart3 size={15} />
+                <span>{showAnalytics ? 'Hide Visual Analytics' : 'Show Charts & Heatmap'}</span>
+              </button>
+            )}
 
             {/* Export Excel Report */}
             <button 
@@ -2072,7 +2077,7 @@ export default function FeeCollection() {
           ) : <div />}
 
           {/* Bulk Selection Actions Bar */}
-          {selectedTxRowIds.size > 0 && (
+          {!isAccountant && selectedTxRowIds.size > 0 && (
             <div className="flex items-center gap-2 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl">
               <span className="text-xs font-bold text-rose-900">
                 {selectedTxRowIds.size} Selected
@@ -2094,14 +2099,16 @@ export default function FeeCollection() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-900 text-white text-xs">
-                <th className="py-3 px-3 text-center w-10">
-                  <input 
-                    type="checkbox"
-                    checked={filteredRecentTxs.length > 0 && selectedTxRowIds.size === filteredRecentTxs.length}
-                    onChange={handleToggleSelectAllTxs}
-                    className="rounded border-slate-700 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                  />
-                </th>
+                {!isAccountant && (
+                  <th className="py-3 px-3 text-center w-10">
+                    <input 
+                      type="checkbox"
+                      checked={filteredRecentTxs.length > 0 && selectedTxRowIds.size === filteredRecentTxs.length}
+                      onChange={handleToggleSelectAllTxs}
+                      className="rounded border-slate-700 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                    />
+                  </th>
+                )}
                 <th className="py-3 px-4 font-semibold">Receipt / ID</th>
                 <th className="py-3 px-4 font-semibold">Date & Time</th>
                 <th className="py-3 px-4 font-semibold">Student</th>
@@ -2116,14 +2123,16 @@ export default function FeeCollection() {
                 const isSelected = selectedTxRowIds.has(Number(tx.id));
                 return (
                   <tr key={tx.id} className={cn("hover:bg-slate-50 transition-colors", isSelected && "bg-rose-50/40")}>
-                    <td className="py-3 px-3 text-center">
-                      <input 
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => handleToggleTxRow(Number(tx.id))}
-                        className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                      />
-                    </td>
+                    {!isAccountant && (
+                      <td className="py-3 px-3 text-center">
+                        <input 
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleToggleTxRow(Number(tx.id))}
+                          className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                        />
+                      </td>
+                    )}
                     <td className="py-3 px-4 font-mono font-bold text-slate-900">
                       <div>#DC-{1000 + tx.id}</div>
                       {tx.is_edited && (
@@ -2171,13 +2180,15 @@ export default function FeeCollection() {
                           Edit
                         </button>
 
-                        <button 
-                          onClick={() => handleDeleteSingleTx(Number(tx.id), `#DC-${1000 + tx.id}`)}
-                          className="bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200 hover:border-rose-600 px-2 py-1.2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1"
-                          title="Delete Transaction Record"
-                        >
-                          <Trash2 size={12} />
-                        </button>
+                        {!isAccountant && (
+                          <button 
+                            onClick={() => handleDeleteSingleTx(Number(tx.id), `#DC-${1000 + tx.id}`)}
+                            className="bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200 hover:border-rose-600 px-2 py-1.2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1"
+                            title="Delete Transaction Record"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        )}
 
                         {tx.is_edited && (
                           <button 
