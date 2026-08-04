@@ -274,9 +274,9 @@ export default function Reports() {
   const refreshData = async () => {
     try {
       const [freshTxs, freshLedger, freshStudents] = await Promise.all([
-        fetch('/api/transactions').then(r => r.json()),
-        fetch('/api/ledger').then(r => r.json()),
-        fetch('/api/students').then(r => r.json())
+        safeFetchJson('/api/transactions', undefined, []),
+        safeFetchJson('/api/ledger', undefined, []),
+        safeFetchJson('/api/students', undefined, [])
       ]);
       setTransactions(Array.isArray(freshTxs) ? freshTxs : []);
       setLedger(Array.isArray(freshLedger) ? freshLedger : []);
@@ -672,8 +672,8 @@ export default function Reports() {
 
         // Re-fetch transactions & ledger to refresh state in UI
         const [freshTxs, freshLedger] = await Promise.all([
-          fetch('/api/transactions').then(r => r.json()),
-          fetch('/api/ledger').then(r => r.json())
+          safeFetchJson('/api/transactions', undefined, []),
+          safeFetchJson('/api/ledger', undefined, [])
         ]);
         setTransactions(Array.isArray(freshTxs) ? freshTxs : []);
         setLedger(Array.isArray(freshLedger) ? freshLedger : []);
