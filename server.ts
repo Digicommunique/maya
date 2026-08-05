@@ -45,7 +45,7 @@ function getMockDbStore() {
         { id: 2, name: "Electrical Engineering" }
       ],
       staff: [
-        { id: 1, staff_id: "admin", name: "Administrator", password: " MayaDCfee@12345", role: "admin" },
+        { id: 1, staff_id: "admin", name: "Administrator", password: "MayaDCfee@12345", role: "admin" },
         { id: 2, staff_id: "ghazi", name: "Ghazi Accountant", password: "mayaghazi@123", role: "accountant" },
         { id: 3, staff_id: "accountant", name: "John Accountant", password: "123", role: "accountant" }
       ],
@@ -1819,17 +1819,25 @@ app.use((err: any, req: any, res: any, next: any) => {
 });
 
 async function startApp() {
-  if (
-    process.env.VERCEL ||
-    process.env.VERCEL_ENV ||
-    process.env.VERCEL_URL ||
-    process.env.VERCEL_REGION ||
-    process.env.NOW_REGION ||
-    process.env.AWS_LAMBDA_FUNCTION_NAME ||
-    process.env.LAMBDA_TASK_ROOT ||
-    process.env.SERVERLESS ||
-    process.env.NO_SERVER_LISTEN === "true"
-  ) {
+  const isMain = process.argv[1] && (
+    process.argv[1].endsWith("server.ts") ||
+    process.argv[1].endsWith("server.js") ||
+    process.argv[1].endsWith("server.cjs")
+  );
+
+  const isServerless =
+    !isMain ||
+    Boolean(process.env.VERCEL) ||
+    Boolean(process.env.VERCEL_ENV) ||
+    Boolean(process.env.VERCEL_URL) ||
+    Boolean(process.env.VERCEL_REGION) ||
+    Boolean(process.env.NOW_REGION) ||
+    Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME) ||
+    Boolean(process.env.LAMBDA_TASK_ROOT) ||
+    Boolean(process.env.SERVERLESS) ||
+    process.env.NO_SERVER_LISTEN === "true";
+
+  if (isServerless) {
     console.log("Running in Vercel Serverless environment. Express router initialized.");
     return;
   }
