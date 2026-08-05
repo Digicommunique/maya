@@ -499,20 +499,22 @@ const handleLogin = asyncHandler(async (req: any, res: any) => {
 
   // 1. First attempt lookup from DB (case-insensitive staff_id match)
   let staff: any = null;
-  try {
-    const { data, error } = await supabase
-      .from("staff")
-      .select("id, staff_id, name, role, password")
-      .ilike("staff_id", cleanStaffId)
-      .maybeSingle();
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from("staff")
+        .select("id, staff_id, name, role, password")
+        .ilike("staff_id", cleanStaffId)
+        .maybeSingle();
 
-    if (error) {
-      console.error("[LOGIN] Supabase query error:", error);
-    } else {
-      staff = data;
+      if (error) {
+        console.error("[LOGIN] Supabase query error:", error);
+      } else {
+        staff = data;
+      }
+    } catch (err) {
+      console.error("[LOGIN] Exception during DB query:", err);
     }
-  } catch (err) {
-    console.error("[LOGIN] Exception during DB query:", err);
   }
 
   // 2. If staff record exists in DB, check against stored password or master fallback
@@ -1860,23 +1862,25 @@ async function startApp() {
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
     // Ensure default admin and ghazi accounts exist if missing without overwriting custom passwords
-    supabase.from("staff").select("id").ilike("staff_id", "admin").maybeSingle()
-      .then(async ({ data }) => {
-        if (!data) {
-          await supabase.from("staff").insert({ staff_id: "admin", name: "Administrator", password: "12345", role: "admin" });
-          console.log("[INIT] Default admin account created");
-        }
-      })
-      .catch(err => console.error("[INIT] Failed to verify admin account:", err));
+    if (supabase) {
+      supabase.from("staff").select("id").ilike("staff_id", "admin").maybeSingle()
+        .then(async ({ data }: any) => {
+          if (!data) {
+            await supabase.from("staff").insert({ staff_id: "admin", name: "Administrator", password: "12345", role: "admin" });
+            console.log("[INIT] Default admin account created");
+          }
+        })
+        .catch((err: any) => console.error("[INIT] Failed to verify admin account:", err));
 
-    supabase.from("staff").select("id").ilike("staff_id", "ghazi").maybeSingle()
-      .then(async ({ data }) => {
-        if (!data) {
-          await supabase.from("staff").insert({ staff_id: "ghazi", name: "Ghazi Accountant", password: "mayaghazi@123", role: "accountant" });
-          console.log("[INIT] Default ghazi account created");
-        }
-      })
-      .catch(err => console.error("[INIT] Failed to verify ghazi account:", err));
+      supabase.from("staff").select("id").ilike("staff_id", "ghazi").maybeSingle()
+        .then(async ({ data }: any) => {
+          if (!data) {
+            await supabase.from("staff").insert({ staff_id: "ghazi", name: "Ghazi Accountant", password: "mayaghazi@123", role: "accountant" });
+            console.log("[INIT] Default ghazi account created");
+          }
+        })
+        .catch((err: any) => console.error("[INIT] Failed to verify ghazi account:", err));
+    }
   });
 }
 
