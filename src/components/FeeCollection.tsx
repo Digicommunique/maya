@@ -28,7 +28,7 @@ import {
   Sparkles,
   ChevronUp,
   Grid,
-  UserCheck
+  UserCheck,
   ChevronLeft,
   ChevronRight,
   UploadCloud,

@@ -1068,7 +1068,7 @@ apiRouter.get("/transactions", asyncHandler(async (req, res) => {
 }));
 
 apiRouter.post("/transactions", asyncHandler(async (req, res) => {
-  const { student_id, amount, payment_mode, transaction_id, academic_term, transaction_date, bank_account, merge_duplicate } = req.body;
+  const { student_id, amount, payment_mode, transaction_id, academic_term, transaction_date, bank_account, merge_duplicate, recorded_by } = req.body;
   
   let finalTxId = transaction_id ? String(transaction_id).trim() : '';
 
