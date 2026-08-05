@@ -517,7 +517,9 @@ const handleLogin = asyncHandler(async (req: any, res: any) => {
 
   // 2. If staff record exists in DB, check against stored password or master fallback
   if (staff) {
+    const dbPassword = String(staff.password || '').trim();
     const isPasswordCorrect =
+      dbPassword === cleanPassword ||
       staff.password === cleanPassword ||
       (lowerStaffId === 'admin' && (cleanPassword === '12345' || cleanPassword === 'MayaDCfee@12345')) ||
       (lowerStaffId === 'ghazi' && cleanPassword === 'mayaghazi@123');
