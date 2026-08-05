@@ -418,6 +418,27 @@ if (geminiApiKey) {
 
 const app = express();
 
+// URL normalization middleware for Vercel & proxy compatibility
+app.use((req, res, next) => {
+  const forwarded = (req.headers['x-forwarded-uri'] || req.headers['x-matched-path']) as string;
+  if (forwarded && forwarded.startsWith('/api')) {
+    req.url = forwarded;
+  } else if (req.url.startsWith('/api/index')) {
+    try {
+      const urlObj = new URL(req.url, 'http://localhost');
+      const pathParam = urlObj.searchParams.get('path');
+      if (pathParam) {
+        req.url = '/api/' + pathParam.replace(/^\//, '');
+      } else if (req.url.startsWith('/api/index/')) {
+        req.url = req.url.replace('/api/index', '/api');
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+  next();
+});
+
 // Request logging middleware (At the very top)
 app.use((req, res, next) => {
   console.log(`[REQUEST] ${new Date().toISOString()} - ${req.method} ${req.path}`);
@@ -462,10 +483,10 @@ const asyncHandler = (fn: (req: any, res: any, next: any) => Promise<any>) => {
   };
 };
 
-// --- DIRECT ROUTE: LOGIN ---
-app.post("/api/login", asyncHandler(async (req, res) => {
-  console.log(`[LOGIN] Attempt for staffId: ${req.body.staffId}`);
-  const { staffId, password } = req.body;
+// --- LOGIN HANDLER ---
+const handleLogin = asyncHandler(async (req: any, res: any) => {
+  console.log(`[LOGIN] Attempt for staffId: ${req.body?.staffId}`);
+  const { staffId, password } = req.body || {};
   
   if (!staffId || !password) {
     console.log("[LOGIN] Failed: Missing credentials");
@@ -561,7 +582,10 @@ app.post("/api/login", asyncHandler(async (req, res) => {
 
   console.log("[LOGIN] User not found or invalid credentials");
   return res.status(401).json({ error: "Invalid Staff ID or Password" });
-}));
+});
+
+app.post("/api/login", handleLogin);
+app.post("/login", handleLogin);
 
 // Direct test route
 app.get("/api-test", (req, res) => {
@@ -571,6 +595,8 @@ app.get("/api-test", (req, res) => {
 
 // API Routes
 const apiRouter = express.Router();
+
+apiRouter.post("/login", handleLogin);
 
 // Health check
 apiRouter.get("/health", asyncHandler(async (req, res) => {
@@ -1763,13 +1789,17 @@ app.get("/sw.js", (req, res) => {
   `);
 });
 
-// Mount the router
+// Mount the router under both /api and root fallback
 app.use("/api", apiRouter);
+app.use(apiRouter);
 
 // API Catch-all for 404s
-app.all("/api/*", (req, res) => {
-  console.log(`[404] API: ${req.method} ${req.path}`);
-  res.status(404).json({ error: `API route not found: ${req.method} ${req.path}` });
+app.use((req: any, res: any, next: any) => {
+  if (req.path.startsWith("/api") || req.path.startsWith("/login") || req.headers?.accept?.includes("application/json")) {
+    console.log(`[404] API: ${req.method} ${req.path}`);
+    return res.status(404).json({ error: `API route not found: ${req.method} ${req.path}` });
+  }
+  next();
 });
 
 // Global JSON error handler for Express
@@ -1785,7 +1815,7 @@ app.use((err: any, req: any, res: any, next: any) => {
 });
 
 async function startApp() {
-  if (process.env.VERCEL) {
+  if (process.env.VERCEL || process.env.SERVERLESS || process.env.VERCEL_ENV) {
     console.log("Running in Vercel Serverless environment. Express router initialized.");
     return;
   }
