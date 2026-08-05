@@ -378,8 +378,8 @@ class MockSupabaseQueryBuilder {
 }
 
 // Supabase client initialization
-const supabaseUrl = process.env.SUPABASE_URL || "";
-const supabaseKey = process.env.SUPABASE_KEY || "";
+const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
+const supabaseKey = process.env.SUPABASE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
 let supabase: any = null;
 let isMockDatabase = false;
 
@@ -420,13 +420,13 @@ const app = express();
 
 // URL normalization middleware for Vercel & proxy compatibility
 app.use((req, res, next) => {
-  const forwarded = (req.headers['x-forwarded-uri'] || req.headers['x-matched-path']) as string;
+  const forwarded = (req.headers['x-forwarded-uri'] || req.headers['x-matched-path'] || req.headers['x-vercel-forwarded-for']) as string;
   if (forwarded && forwarded.startsWith('/api')) {
     req.url = forwarded;
   } else if (req.url.startsWith('/api/index')) {
     try {
       const urlObj = new URL(req.url, 'http://localhost');
-      const pathParam = urlObj.searchParams.get('path');
+      const pathParam = urlObj.searchParams.get('0') || urlObj.searchParams.get('path');
       if (pathParam) {
         req.url = '/api/' + pathParam.replace(/^\//, '');
       } else if (req.url.startsWith('/api/index/')) {
@@ -1817,7 +1817,17 @@ app.use((err: any, req: any, res: any, next: any) => {
 });
 
 async function startApp() {
-  if (process.env.VERCEL || process.env.SERVERLESS || process.env.VERCEL_ENV) {
+  if (
+    process.env.VERCEL ||
+    process.env.VERCEL_ENV ||
+    process.env.VERCEL_URL ||
+    process.env.VERCEL_REGION ||
+    process.env.NOW_REGION ||
+    process.env.AWS_LAMBDA_FUNCTION_NAME ||
+    process.env.LAMBDA_TASK_ROOT ||
+    process.env.SERVERLESS ||
+    process.env.NO_SERVER_LISTEN === "true"
+  ) {
     console.log("Running in Vercel Serverless environment. Express router initialized.");
     return;
   }
