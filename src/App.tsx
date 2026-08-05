@@ -21,6 +21,7 @@ import FeeCollection from './components/FeeCollection';
 import Reports from './components/Reports';
 import { safeFetchJson } from './utils/api';
 import Login from './components/Login';
+import { DEFAULT_MAYA_LOGO_BASE64 } from './assets/logoData';
 
 export default function App() {
   const navigate = useNavigate();
@@ -171,9 +172,9 @@ export default function App() {
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center bg-slate-50 border border-slate-200 p-1 flex-shrink-0">
                         <img 
-                          src={orgSettings?.logo || "/logo.jpg"} 
+                          src={(orgSettings?.logo && typeof orgSettings.logo === 'string' && orgSettings.logo.trim() && orgSettings.logo !== '/logo.jpg' && orgSettings.logo !== '/api/app-icon') ? orgSettings.logo : DEFAULT_MAYA_LOGO_BASE64} 
                           alt="Logo" 
-                          onError={(e: any) => { e.target.src = "/logo.jpg"; }}
+                          onError={(e: any) => { e.target.src = DEFAULT_MAYA_LOGO_BASE64; }}
                           className="w-full h-full object-contain" 
                         />
                       </div>

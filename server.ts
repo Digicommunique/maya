@@ -5,6 +5,7 @@ import { fileURLToPath } from "url";
 import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
 import { GoogleGenAI, Type } from "@google/genai";
+import { DEFAULT_MAYA_LOGO_BASE64 } from "./src/assets/logoData";
 
 dotenv.config();
 
@@ -1579,7 +1580,7 @@ apiRouter.get("/summary", asyncHandler(async (req, res) => {
 apiRouter.get("/app-icon", asyncHandler(async (req, res) => {
   try {
     const { data: settings } = await supabase.from("org_settings").select("logo").eq("id", 1).maybeSingle();
-    if (settings?.logo && typeof settings.logo === 'string' && settings.logo.trim()) {
+    if (settings?.logo && typeof settings.logo === 'string' && settings.logo.trim() && settings.logo !== '/logo.jpg' && settings.logo !== '/api/app-icon') {
       const logoStr = settings.logo.trim();
       if (logoStr.startsWith("data:image/")) {
         const matches = logoStr.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
@@ -1587,7 +1588,7 @@ apiRouter.get("/app-icon", asyncHandler(async (req, res) => {
           const mimeType = matches[1];
           const buffer = Buffer.from(matches[2], 'base64');
           res.setHeader("Content-Type", mimeType);
-          res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+          res.setHeader("Cache-Control", "public, max-age=86400");
           return res.send(buffer);
         }
       } else if (logoStr.startsWith("http://") || logoStr.startsWith("https://")) {
@@ -1598,17 +1599,22 @@ apiRouter.get("/app-icon", asyncHandler(async (req, res) => {
     console.error("Error retrieving logo from org_settings:", err);
   }
 
-  const iconPath = path.join(__dirname, "src", "assets", "images", "maya_group_logo_1785679886112.jpg");
-  if (fs.existsSync(iconPath)) {
-    res.setHeader("Content-Type", "image/jpeg");
-    res.setHeader("Cache-Control", "public, max-age=86400");
-    return res.sendFile(iconPath);
+  // Fallback: serve Maya Group official embedded Base64 logo buffer
+  try {
+    const matches = DEFAULT_MAYA_LOGO_BASE64.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
+    if (matches && matches.length === 3) {
+      const mimeType = matches[1];
+      const buffer = Buffer.from(matches[2], 'base64');
+      res.setHeader("Content-Type", mimeType);
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      return res.send(buffer);
+    }
+  } catch (e) {
+    console.error("Error serving Base64 app-icon:", e);
   }
-  res.setHeader("Content-Type", "image/svg+xml");
-  res.send(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="192" height="192">
-    <circle cx="50" cy="50" r="48" fill="#0284c7" stroke="#fbbf24" stroke-width="3"/>
-    <text x="50" y="55" font-size="24" font-weight="bold" fill="#ffffff" text-anchor="middle" font-family="sans-serif">MAYA</text>
-  </svg>`);
+
+  res.setHeader("Content-Type", "image/jpeg");
+  return res.send(Buffer.from(""));
 }));
 
 // Mobile App PWA / App Installer route (No package manager needed)

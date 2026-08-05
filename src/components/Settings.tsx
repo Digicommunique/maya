@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { DEFAULT_MAYA_LOGO_BASE64 } from '../assets/logoData';
 import { 
   Building2, 
   Calendar, 
@@ -222,11 +223,12 @@ export default function Settings() {
                 <label className="block text-xs sm:text-sm font-bold text-slate-700 uppercase tracking-wider">Institution Logo</label>
                 <div className="relative group">
                   <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden">
-                    {data.settings.logo ? (
-                      <img src={data.settings.logo} alt="Logo" className="w-full h-full object-contain p-2" />
-                    ) : (
-                      <Upload className="text-slate-300" size={32} />
-                    )}
+                    <img 
+                      src={(data.settings.logo && typeof data.settings.logo === 'string' && data.settings.logo.trim()) ? data.settings.logo : DEFAULT_MAYA_LOGO_BASE64} 
+                      alt="Logo" 
+                      onError={(e: any) => { e.target.src = DEFAULT_MAYA_LOGO_BASE64; }}
+                      className="w-full h-full object-contain p-2" 
+                    />
                   </div>
                   <input 
                     type="file" 

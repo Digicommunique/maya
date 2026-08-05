@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Lock, User, ArrowRight, Download, Smartphone, CheckCircle, X, Sparkles, Share, MoreVertical } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { DEFAULT_MAYA_LOGO_BASE64 } from '../assets/logoData';
 
 interface LoginProps {
   onLogin: (staff: any) => void;
@@ -95,7 +96,9 @@ export default function Login({ onLogin, orgSettings }: LoginProps) {
   };
 
   const orgName = orgSettings?.name || "MAYA GROUP OF INSTITUTIONS";
-  const logoSrc = (orgSettings?.logo && orgSettings.logo.trim()) ? orgSettings.logo : "/logo.jpg";
+  const logoSrc = (orgSettings?.logo && typeof orgSettings.logo === 'string' && orgSettings.logo.trim() && orgSettings.logo !== '/logo.jpg' && orgSettings.logo !== '/api/app-icon')
+    ? orgSettings.logo
+    : DEFAULT_MAYA_LOGO_BASE64;
 
   return (
     <div className="min-h-screen bg-slate-100/70 flex flex-col items-center justify-between p-4 py-8 font-sans space-y-6">
@@ -111,7 +114,7 @@ export default function Login({ onLogin, orgSettings }: LoginProps) {
             <img 
               src={logoSrc} 
               alt="Maya Group Logo" 
-              onError={(e: any) => { e.target.src = "/logo.jpg"; }}
+              onError={(e: any) => { e.target.src = DEFAULT_MAYA_LOGO_BASE64; }}
               className="w-full h-full object-contain rounded-xl" 
             />
           </div>
@@ -197,7 +200,7 @@ export default function Login({ onLogin, orgSettings }: LoginProps) {
         >
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 bg-white rounded-xl p-0.5 shrink-0 flex items-center justify-center overflow-hidden border border-emerald-500/30">
-              <img src={logoSrc} alt="App Icon" onError={(e: any) => { e.target.src = "/logo.jpg"; }} className="w-full h-full object-contain rounded-lg" />
+              <img src={logoSrc} alt="App Icon" onError={(e: any) => { e.target.src = DEFAULT_MAYA_LOGO_BASE64; }} className="w-full h-full object-contain rounded-lg" />
             </div>
             <div>
               <h3 className="font-extrabold text-sm text-white flex items-center gap-1.5">
@@ -253,7 +256,7 @@ export default function Login({ onLogin, orgSettings }: LoginProps) {
 
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-white rounded-xl p-0.5 shrink-0 flex items-center justify-center border border-emerald-500/40 shadow-lg">
-                  <img src={logoSrc} alt="App Icon" onError={(e: any) => { e.target.src = "/logo.jpg"; }} className="w-full h-full object-contain rounded-lg" />
+                  <img src={logoSrc} alt="App Icon" onError={(e: any) => { e.target.src = DEFAULT_MAYA_LOGO_BASE64; }} className="w-full h-full object-contain rounded-lg" />
                 </div>
                 <div>
                   <h3 className="font-extrabold text-base text-white">

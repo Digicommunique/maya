@@ -1,6 +1,7 @@
 import React from 'react';
 import { format } from 'date-fns';
 import { Transaction, OrgSettings } from '../types';
+import { DEFAULT_MAYA_LOGO_BASE64 } from '../assets/logoData';
 
 interface ReceiptProps {
   transaction: Transaction;
@@ -45,14 +46,13 @@ export default function Receipt({ transaction, settings }: ReceiptProps) {
       {/* Header */}
       <div className="flex items-start justify-between pb-4 border-b border-slate-200 gap-4">
         <div className="flex items-start gap-4">
-          <div className="w-16 h-16 rounded-full border-2 border-emerald-500/30 p-1 flex items-center justify-center shrink-0 bg-emerald-50">
-            {settings?.logo ? (
-              <img src={settings.logo} alt="Logo" className="w-full h-full object-contain rounded-full" />
-            ) : (
-              <div className="w-full h-full bg-emerald-600 rounded-full flex items-center justify-center text-white font-black text-sm">
-                {orgName.substring(0, 2).toUpperCase()}
-              </div>
-            )}
+          <div className="w-16 h-16 rounded-full border-2 border-emerald-500/30 p-1 flex items-center justify-center shrink-0 bg-emerald-50 overflow-hidden">
+            <img 
+              src={(settings?.logo && typeof settings.logo === 'string' && settings.logo.trim()) ? settings.logo : DEFAULT_MAYA_LOGO_BASE64} 
+              alt="Logo" 
+              onError={(e: any) => { e.target.src = DEFAULT_MAYA_LOGO_BASE64; }}
+              className="w-full h-full object-contain rounded-full" 
+            />
           </div>
           <div>
             <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight uppercase">
