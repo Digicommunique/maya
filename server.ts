@@ -45,7 +45,7 @@ function getMockDbStore() {
         { id: 2, name: "Electrical Engineering" }
       ],
       staff: [
-        { id: 1, staff_id: "admin", name: "Administrator", password: "12345", role: "admin" },
+        { id: 1, staff_id: "admin", name: "Administrator", password: " MayaDCfee@12345", role: "admin" },
         { id: 2, staff_id: "ghazi", name: "Ghazi Accountant", password: "mayaghazi@123", role: "accountant" },
         { id: 3, staff_id: "accountant", name: "John Accountant", password: "123", role: "accountant" }
       ],
