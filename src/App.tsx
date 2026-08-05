@@ -169,15 +169,14 @@ export default function App() {
                 <div className="h-full flex flex-col">
                   <div className="p-5 sm:p-6 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      {orgSettings?.logo ? (
-                        <div className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center bg-slate-50 border border-slate-200 p-1 flex-shrink-0">
-                          <img src={orgSettings.logo} alt="Logo" className="w-full h-full object-contain" />
-                        </div>
-                      ) : (
-                        <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-emerald-200 flex-shrink-0">
-                          <CreditCard size={24} />
-                        </div>
-                      )}
+                      <div className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center bg-slate-50 border border-slate-200 p-1 flex-shrink-0">
+                        <img 
+                          src={orgSettings?.logo || "/logo.jpg"} 
+                          alt="Logo" 
+                          onError={(e: any) => { e.target.src = "/logo.jpg"; }}
+                          className="w-full h-full object-contain" 
+                        />
+                      </div>
                       <div className="min-w-0 flex-1">
                         <h1 className="font-bold text-base sm:text-lg leading-tight truncate" title={orgSettings?.name || "DCEDUPayFee"}>
                           {orgSettings?.name || "DCEDUPayFee"}

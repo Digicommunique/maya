@@ -97,6 +97,76 @@ class MockSupabaseQueryBuilder {
     return this;
   }
 
+  neq(field: string, value: any) {
+    this.filters.push((item) => {
+      return item[field] !== value && String(item[field]) !== String(value);
+    });
+    return this;
+  }
+
+  ilike(field: string, pattern: string) {
+    const cleanPattern = String(pattern || '').replace(/%/g, '').toLowerCase();
+    this.filters.push((item) => {
+      const val = String(item[field] ?? '').toLowerCase();
+      return val.includes(cleanPattern);
+    });
+    return this;
+  }
+
+  like(field: string, pattern: string) {
+    const cleanPattern = String(pattern || '').replace(/%/g, '');
+    this.filters.push((item) => {
+      const val = String(item[field] ?? '');
+      return val.includes(cleanPattern);
+    });
+    return this;
+  }
+
+  in(field: string, values: any[]) {
+    const set = new Set((values || []).map(v => String(v)));
+    this.filters.push((item) => {
+      return set.has(String(item[field]));
+    });
+    return this;
+  }
+
+  gt(field: string, value: any) {
+    this.filters.push((item) => Number(item[field]) > Number(value));
+    return this;
+  }
+
+  gte(field: string, value: any) {
+    this.filters.push((item) => Number(item[field]) >= Number(value));
+    return this;
+  }
+
+  lt(field: string, value: any) {
+    this.filters.push((item) => Number(item[field]) < Number(value));
+    return this;
+  }
+
+  lte(field: string, value: any) {
+    this.filters.push((item) => Number(item[field]) <= Number(value));
+    return this;
+  }
+
+  is(field: string, value: any) {
+    this.filters.push((item) => item[field] === value);
+    return this;
+  }
+
+  or(filterStr: string) {
+    return this;
+  }
+
+  contains(field: string, value: any) {
+    this.filters.push((item) => {
+      if (Array.isArray(item[field])) return item[field].includes(value);
+      return String(item[field] ?? '').includes(String(value));
+    });
+    return this;
+  }
+
   order(field: string, options?: { ascending?: boolean }) {
     this.orderField = field;
     this.orderAscending = options?.ascending !== false;
