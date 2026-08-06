@@ -6,10 +6,6 @@
       "destination": "/api/index.ts?path=$1"
     },
     {
-      "source": "/login",
-      "destination": "/api/index.ts?path=login"
-    },
-    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
