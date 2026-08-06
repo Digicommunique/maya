@@ -1,3 +1,4 @@
+import { createRequire } from 'module'; const require = createRequire(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -43759,6 +43760,4 @@ var require_oauth2client = __commonJS({
         if (thisCreds.access_token && !this.isTokenExpiring()) {
           thisCreds.token_type = thisCreds.token_type || "Bearer";
           const headers2 = new Headers({
-            authorization: thisCreds.token_type + " " + thisCreds.access_token
-          });
-          return { headers: this.addShared
+            authorization: thisCreds.token_type
