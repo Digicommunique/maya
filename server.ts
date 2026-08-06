@@ -600,6 +600,41 @@ app.get("/api-test", (req, res) => {
 // API Routes
 const apiRouter = express.Router();
 
+// Fast Server-side In-Memory Cache for GET read requests
+const serverCache = new Map<string, { data: any; timestamp: number }>();
+const SERVER_CACHE_TTL_MS = 15000; // 15 seconds TTL
+
+function clearServerCache() {
+  serverCache.clear();
+}
+
+// Automatically clear server cache on mutation requests (POST, PUT, DELETE)
+apiRouter.use((req, res, next) => {
+  if (req.method !== 'GET') {
+    clearServerCache();
+  }
+  next();
+});
+
+const cacheGet = (ttlMs = SERVER_CACHE_TTL_MS) => {
+  return (req: any, res: any, next: any) => {
+    if (req.method !== 'GET') return next();
+    const key = req.originalUrl || req.url;
+    const cached = serverCache.get(key);
+    if (cached && (Date.now() - cached.timestamp < ttlMs)) {
+      return res.json(cached.data);
+    }
+    const originalJson = res.json.bind(res);
+    res.json = (body: any) => {
+      if (res.statusCode >= 200 && res.statusCode < 300 && body && !body.error) {
+        serverCache.set(key, { data: body, timestamp: Date.now() });
+      }
+      return originalJson(body);
+    };
+    next();
+  };
+};
+
 apiRouter.post("/login", handleLogin);
 
 // Health check
@@ -671,7 +706,7 @@ apiRouter.get("/debug/db", asyncHandler(async (req, res) => {
 }));
 
 // Settings & Setup
-apiRouter.get("/settings", asyncHandler(async (req, res) => {
+apiRouter.get("/settings", cacheGet(), asyncHandler(async (req, res) => {
   const { data: settings } = await supabase.from("org_settings").select("*").eq("id", 1).maybeSingle();
   const { data: semesters } = await supabase.from("semesters").select("*").order("id");
   const { data: sessions } = await supabase.from("sessions").select("*").order("id");
@@ -764,7 +799,7 @@ apiRouter.delete("/settings/staff/:id", asyncHandler(async (req, res) => {
 }));
 
 // Fee Plans
-apiRouter.get("/fee-plans", asyncHandler(async (req, res) => {
+apiRouter.get("/fee-plans", cacheGet(), asyncHandler(async (req, res) => {
   const { data: plans, error } = await supabase
     .from("fee_plans")
     .select("*, heads:fee_heads(*)");
@@ -836,7 +871,7 @@ apiRouter.put("/fee-plans/:id", asyncHandler(async (req, res) => {
 }));
 
 // Students
-apiRouter.get("/students", asyncHandler(async (req, res) => {
+apiRouter.get("/students", cacheGet(), asyncHandler(async (req, res) => {
   const [{ data: students, error }, { data: txs }] = await Promise.all([
     supabase
       .from("students")
@@ -1493,7 +1528,7 @@ apiRouter.delete("/transactions/:id", asyncHandler(async (req, res) => {
 }));
 
 // Reports
-apiRouter.get("/summary", asyncHandler(async (req, res) => {
+apiRouter.get("/summary", cacheGet(), asyncHandler(async (req, res) => {
   const { data: txs } = await supabase.from("transactions").select("amount, student_id, created_at, transaction_date");
   const { data: students } = await supabase.from("students").select("id, name, roll_no, plan_id");
   const { data: plans } = await supabase.from("fee_plans").select("id, name, total_amount");
@@ -1696,7 +1731,7 @@ apiRouter.get("/download-apk", (req, res) => {
 </html>`);
 });
 
-apiRouter.get("/ledger", asyncHandler(async (req, res) => {
+apiRouter.get("/ledger", cacheGet(), asyncHandler(async (req, res) => {
   const { data: students, error } = await supabase
     .from("students")
     .select(`

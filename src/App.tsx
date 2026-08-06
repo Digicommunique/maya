@@ -253,7 +253,7 @@ export default function App() {
                     </h2>
                   </div>
                   
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2.5 sm:gap-3">
                     <div className="text-right hidden sm:block">
                       <p className="text-xs sm:text-sm font-semibold text-slate-900 truncate max-w-[150px]">{user.name}</p>
                       <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">{user.role}</p>
@@ -261,6 +261,15 @@ export default function App() {
                     <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600 font-bold text-xs sm:text-sm uppercase shrink-0">
                       {user.name.substring(0, 2)}
                     </div>
+                    <div className="h-6 w-px bg-slate-200 mx-0.5 hidden sm:block" />
+                    <button
+                      onClick={handleLogout}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-xl text-slate-600 hover:text-red-600 hover:bg-red-50 border border-slate-200 hover:border-red-200 transition-all text-xs font-semibold shrink-0 cursor-pointer shadow-2xs active:scale-95"
+                      title="Sign Out"
+                    >
+                      <LogOut size={16} className="shrink-0" />
+                      <span className="hidden sm:inline">Logout</span>
+                    </button>
                   </div>
                 </header>
 
