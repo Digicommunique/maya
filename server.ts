@@ -932,15 +932,29 @@ apiRouter.post("/students", asyncHandler(async (req, res) => {
     }
   }
 
+  const cleanId = (val: any) => {
+    if (val === null || val === undefined) return null;
+    const str = String(val).trim();
+    if (!str) return null;
+    const num = Number(str);
+    return (!isNaN(num) && num > 0) ? num : null;
+  };
+
   const insertPayload: any = {
-    name, guardian_name, roll_no, phone, plan_id, branch_id, semester_id, session_id,
-    created_by: req.body.created_by || req.body.staff_name || "Accountant"
+    name: name ? String(name).trim() : 'Student',
+    guardian_name: guardian_name ? String(guardian_name).trim() : '',
+    roll_no: roll_no ? String(roll_no).trim() : `[Auto] R-${Math.floor(100000 + Math.random() * 900000)}`,
+    phone: phone ? String(phone).trim() : '',
+    plan_id: cleanId(plan_id),
+    branch_id: cleanId(branch_id),
+    semester_id: cleanId(semester_id),
+    session_id: cleanId(session_id)
   };
   if (created_at) {
     insertPayload.created_at = created_at;
   }
 
-  const { data, error } = await supabase.from("students").insert(insertPayload).select().single();
+  let { data, error } = await supabase.from("students").insert(insertPayload).select().single();
 
   if (error) return res.status(400).json({ error: "Roll No already exists or failed", details: error.message });
   res.json({ success: true, id: data?.id });
@@ -952,6 +966,14 @@ apiRouter.post("/students/bulk", asyncHandler(async (req, res) => {
   if (!Array.isArray(students) || students.length === 0) {
     return res.status(400).json({ error: "INVALID_PAYLOAD", message: "Students array is required and cannot be empty." });
   }
+
+  const cleanId = (val: any) => {
+    if (val === null || val === undefined) return null;
+    const str = String(val).trim();
+    if (!str) return null;
+    const num = Number(str);
+    return (!isNaN(num) && num > 0) ? num : null;
+  };
 
   let successCount = 0;
   let failCount = 0;
@@ -984,13 +1006,13 @@ apiRouter.post("/students/bulk", asyncHandler(async (req, res) => {
       const existing = existingMap.get(cleanRollNoLower);
       if (s.merge_duplicate) {
         const { error: updErr } = await supabase.from("students").update({
-          name: s.name,
-          guardian_name: s.guardian_name,
-          phone: s.phone,
-          plan_id: s.plan_id ? Number(s.plan_id) : null,
-          branch_id: s.branch_id ? Number(s.branch_id) : null,
-          semester_id: s.semester_id ? Number(s.semester_id) : null,
-          session_id: s.session_id ? Number(s.session_id) : null
+          name: s.name ? String(s.name).trim() : existing.name,
+          guardian_name: s.guardian_name ? String(s.guardian_name).trim() : existing.guardian_name,
+          phone: s.phone ? String(s.phone).trim() : existing.phone,
+          plan_id: cleanId(s.plan_id),
+          branch_id: cleanId(s.branch_id),
+          semester_id: cleanId(s.semester_id),
+          session_id: cleanId(s.session_id)
         }).eq("id", existing.id);
 
         if (updErr) {
@@ -1006,15 +1028,14 @@ apiRouter.post("/students/bulk", asyncHandler(async (req, res) => {
       }
     } else {
       toInsert.push({
-        name: s.name,
-        guardian_name: s.guardian_name,
+        name: s.name ? String(s.name).trim() : 'Student',
+        guardian_name: s.guardian_name ? String(s.guardian_name).trim() : '',
         roll_no: rollNo || `[Auto] R-${Math.floor(100000 + Math.random() * 900000)}`,
-        phone: s.phone,
-        plan_id: s.plan_id ? Number(s.plan_id) : null,
-        branch_id: s.branch_id ? Number(s.branch_id) : null,
-        semester_id: s.semester_id ? Number(s.semester_id) : null,
-        session_id: s.session_id ? Number(s.session_id) : null,
-        created_by: s.created_by || req.body.created_by || "Accountant",
+        phone: s.phone ? String(s.phone).trim() : '',
+        plan_id: cleanId(s.plan_id),
+        branch_id: cleanId(s.branch_id),
+        semester_id: cleanId(s.semester_id),
+        session_id: cleanId(s.session_id),
         created_at: s.created_at || new Date().toISOString()
       });
     }
@@ -1022,6 +1043,7 @@ apiRouter.post("/students/bulk", asyncHandler(async (req, res) => {
 
   if (toInsert.length > 0) {
     const { data: insertedData, error: batchErr } = await supabase.from("students").insert(toInsert).select("id");
+    
     if (batchErr) {
       console.warn("[BULK INSERT FALLBACK] Batch insert encountered error, falling back to individual inserts:", batchErr.message);
       for (const item of toInsert) {
@@ -1114,7 +1136,16 @@ apiRouter.put("/students/:id", asyncHandler(async (req, res) => {
     updatePayload.previous_data = prevData;
   }
 
-  const { error } = await supabase.from("students").update(updatePayload).eq("id", req.params.id);
+  let { error } = await supabase.from("students").update(updatePayload).eq("id", req.params.id);
+  if (error && (error.message?.includes("schema cache") || error.message?.includes("column"))) {
+    console.warn("[SUPABASE SCHEMA COMPATIBILITY] Retrying student update without edit audit columns:", error.message);
+    delete updatePayload.is_edited;
+    delete updatePayload.edited_by;
+    delete updatePayload.edited_at;
+    delete updatePayload.previous_data;
+    const retryUpd = await supabase.from("students").update(updatePayload).eq("id", req.params.id);
+    error = retryUpd.error;
+  }
   if (error) return res.status(400).json({ error: "Update failed", message: error.message });
   res.json({ success: true });
 }));

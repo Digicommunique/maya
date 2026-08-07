@@ -212,10 +212,8 @@ export default function StudentDirectory({ user }: { user?: any }) {
     const url = editingStudent ? `/api/students/${editingStudent.id}` : '/api/students';
     const method = editingStudent ? 'PUT' : 'POST';
 
-    const creatorName = user?.name ? `${user.name} (${user.role === 'accountant' ? 'Accountant' : user.role})` : 'Accountant';
     const payload: any = {
-      ...newStudent,
-      created_by: creatorName
+      ...newStudent
     };
 
     if (editingStudent) {
@@ -548,7 +546,6 @@ export default function StudentDirectory({ user }: { user?: any }) {
           const matchedSemesterId = (activeSemesters.find(s => s.name.toLowerCase() === cleanSem.toLowerCase())?.id || '').toString();
           const matchedSessionId = (activeSessions.find(s => s.name.toLowerCase() === cleanSess.toLowerCase())?.id || '').toString();
 
-          const creatorName = user?.name ? `${user.name} (${user.role === 'accountant' ? 'Accountant' : user.role})` : 'Accountant';
           studentPayloads.push({
             name: studentName,
             guardian_name: guardian,
@@ -558,7 +555,6 @@ export default function StudentDirectory({ user }: { user?: any }) {
             branch_id: matchedBranchId,
             semester_id: matchedSemesterId,
             session_id: matchedSessionId,
-            created_by: creatorName,
             merge_duplicate: true
           });
         });
