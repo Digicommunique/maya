@@ -275,8 +275,9 @@ export default function FeeCollection({ user }: { user?: any }) {
               })
             });
             const stData = await stRes.json();
-            if (stData.success && stData.student?.id) {
-              stId = stData.student.id;
+            const createdId = stData.id || stData.student?.id;
+            if (stData.success && createdId) {
+              stId = createdId;
             }
           } catch (stErr) {
             console.warn('Auto student creation fallback error:', stErr);

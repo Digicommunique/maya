@@ -293,6 +293,41 @@ export default function Reports() {
     // Reset file input
     e.target.value = '';
 
+    const isPdf = file.name.toLowerCase().endsWith('.pdf');
+
+    if (isPdf) {
+      const pdfReader = new FileReader();
+      pdfReader.onload = async () => {
+        try {
+          const pdfBase64 = pdfReader.result as string;
+          const res = await fetch('/api/parse-collection-pdf', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pdfBase64 })
+          });
+          const parsed = await res.json();
+          if (!res.ok || !parsed.records || parsed.records.length === 0) {
+            alert("No financial collection records could be extracted from this PDF report.");
+            return;
+          }
+          const mappedRows = parsed.records.map((r: any) => ({
+            'Student Name': r.matched_student_name || r.raw_identifier,
+            'Roll No': r.matched_roll_no,
+            'Amount': r.amount,
+            'Payment Mode': r.payment_mode,
+            'Transaction ID': r.transaction_id,
+            'Date': r.transaction_date,
+            'Remarks': r.fee_head_or_notes
+          }));
+          processReportDataRows(mappedRows);
+        } catch (pdfErr: any) {
+          alert("Error processing PDF report: " + (pdfErr.message || pdfErr));
+        }
+      };
+      pdfReader.readAsDataURL(file);
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = async (evt) => {
       try {
@@ -307,27 +342,37 @@ export default function Reports() {
           return;
         }
 
-        setImportStatus({
-          isOpen: true,
-          total: data.length,
-          processed: 0,
-          successCount: 0,
-          failCount: 0,
-          errors: []
-        });
+        processReportDataRows(data);
+      } catch (err: any) {
+        alert(`Failed to parse the report file (CSV/Excel/PDF): ${err.message || err}`);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
 
-        // Fetch current master data: students, plans, settings
-        const [studentsRes, plansRes, settingsRes] = await Promise.all([
-          fetch('/api/students').then(r => r.json()),
-          fetch('/api/fee-plans').then(r => r.json()),
-          fetch('/api/settings').then(r => r.json())
-        ]);
+  const processReportDataRows = async (data: any[]) => {
+    try {
+      setImportStatus({
+        isOpen: true,
+        total: data.length,
+        processed: 0,
+        successCount: 0,
+        failCount: 0,
+        errors: []
+      });
 
-        const currentStudents = Array.isArray(studentsRes) ? studentsRes : [];
-        const currentPlans = Array.isArray(plansRes) ? plansRes : [];
-        const branches = settingsRes?.branches || [];
-        const semesters = settingsRes?.semesters || [];
-        const sessions = settingsRes?.sessions || [];
+      // Fetch current master data: students, plans, settings
+      const [studentsRes, plansRes, settingsRes] = await Promise.all([
+        fetch('/api/students').then(r => r.json()),
+        fetch('/api/fee-plans').then(r => r.json()),
+        fetch('/api/settings').then(r => r.json())
+      ]);
+
+      const currentStudents = Array.isArray(studentsRes) ? studentsRes : [];
+      const currentPlans = Array.isArray(plansRes) ? plansRes : [];
+      const branches = settingsRes?.branches || [];
+      const semesters = settingsRes?.semesters || [];
+      const sessions = settingsRes?.sessions || [];
 
         const findValue = (row: any, possibleKeys: string[]) => {
           for (const key of Object.keys(row)) {
@@ -678,11 +723,9 @@ export default function Reports() {
         setTransactions(Array.isArray(freshTxs) ? freshTxs : []);
         setLedger(Array.isArray(freshLedger) ? freshLedger : []);
 
-      } catch (err: any) {
-        alert(`Failed to parse the report file (CSV/Excel): ${err.message || err}`);
-      }
-    };
-    reader.readAsArrayBuffer(file);
+    } catch (err: any) {
+      alert(`Error processing report data: ${err.message || err}`);
+    }
   };
 
   // --- LEDGER REPORT VALIDATION & MATCHING ENGINE ---
@@ -692,6 +735,36 @@ export default function Reports() {
 
     const fileName = file.name;
     e.target.value = '';
+
+    if (file.name.toLowerCase().endsWith('.pdf')) {
+      const pdfReader = new FileReader();
+      pdfReader.onload = async () => {
+        try {
+          const pdfBase64 = pdfReader.result as string;
+          const res = await fetch('/api/parse-collection-pdf', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pdfBase64 })
+          });
+          const parsed = await res.json();
+          if (!res.ok || !parsed.records || parsed.records.length === 0) {
+            alert("No financial collection records could be extracted from this PDF ledger report.");
+            return;
+          }
+          const mappedRows = parsed.records.map((r: any) => ({
+            'Student Name': r.matched_student_name || r.raw_identifier,
+            'Roll No': r.matched_roll_no,
+            'Total Paid': r.amount,
+            'Uploaded Paid': r.amount
+          }));
+          processLedgerValidationRows(mappedRows, fileName);
+        } catch (err: any) {
+          alert("Error processing PDF ledger report: " + (err.message || err));
+        }
+      };
+      pdfReader.readAsDataURL(file);
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = async (evt) => {
@@ -707,9 +780,19 @@ export default function Reports() {
           return;
         }
 
-        // Fetch fresh ledger data
-        const freshLedger = await fetch('/api/ledger').then(r => r.json()).catch(() => ledger);
-        const activeLedger = Array.isArray(freshLedger) ? freshLedger : ledger;
+        processLedgerValidationRows(data, fileName);
+      } catch (err: any) {
+        alert(`Failed to parse ledger report file: ${err.message || err}`);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const processLedgerValidationRows = async (data: any[], fileName: string) => {
+    try {
+      // Fetch fresh ledger data
+      const freshLedger = await fetch('/api/ledger').then(r => r.json()).catch(() => ledger);
+      const activeLedger = Array.isArray(freshLedger) ? freshLedger : ledger;
 
         const findValue = (row: any, possibleKeys: string[]) => {
           for (const key of Object.keys(row)) {
@@ -820,11 +903,9 @@ export default function Reports() {
         });
         setIsLedgerValidationModalOpen(true);
 
-      } catch (err: any) {
-        alert(`Failed to parse ledger report: ${err.message || 'Invalid CSV/Excel format'}`);
-      }
-    };
-    reader.readAsArrayBuffer(file);
+    } catch (err: any) {
+      alert(`Failed to parse ledger report: ${err.message || 'Invalid CSV/Excel/PDF format'}`);
+    }
   };
 
   const reconcileRow = async (item: any) => {

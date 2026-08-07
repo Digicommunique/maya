@@ -1224,9 +1224,10 @@ apiRouter.post("/transactions", asyncHandler(async (req, res) => {
 
   let { data: inserted, error } = await supabase.from("transactions").insert(insertPayload).select().single();
 
-  if (error && (error.message?.includes("bank_account") || error.message?.includes("schema cache"))) {
-    console.warn("[SUPABASE SCHEMA COMPATIBILITY] Retrying transaction insert without bank_account column:", error.message);
+  if (error && (error.message?.includes("bank_account") || error.message?.includes("recorded_by") || error.message?.includes("schema cache"))) {
+    console.warn("[SUPABASE SCHEMA COMPATIBILITY] Retrying transaction insert without extra columns:", error.message);
     delete insertPayload.bank_account;
+    delete insertPayload.recorded_by;
     const retryRes = await supabase.from("transactions").insert(insertPayload).select().single();
     inserted = retryRes.data;
     error = retryRes.error;
@@ -1270,8 +1271,9 @@ apiRouter.post("/transactions/bulk", asyncHandler(async (req, res) => {
     if (t.created_at) insertPayload.created_at = t.created_at;
 
     let { data: inserted, error } = await supabase.from("transactions").insert(insertPayload).select().single();
-    if (error && (error.message?.includes("bank_account") || error.message?.includes("schema cache"))) {
+    if (error && (error.message?.includes("bank_account") || error.message?.includes("recorded_by") || error.message?.includes("schema cache"))) {
       delete insertPayload.bank_account;
+      delete insertPayload.recorded_by;
       const retryRes = await supabase.from("transactions").insert(insertPayload).select().single();
       inserted = retryRes.data;
       error = retryRes.error;
@@ -1368,11 +1370,38 @@ Return a valid JSON array of objects.`
       });
 
       if (response.text) {
-        extractedRows = JSON.parse(response.text.trim());
+        let cleanText = response.text.trim();
+        cleanText = cleanText.replace(/```json/gi, '').replace(/```/g, '').trim();
+        try {
+          extractedRows = JSON.parse(cleanText);
+        } catch (jsonErr) {
+          console.warn("[GEMINI PDF JSON PARSE WARNING]", jsonErr);
+        }
       }
     }
   } catch (err: any) {
     console.error("[GEMINI PDF PARSE ERROR]", err);
+  }
+
+  // Fallback text parser if Gemini AI did not return rows but pdfText exists
+  if (extractedRows.length === 0 && pdfText && typeof pdfText === 'string') {
+    const lines = pdfText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    for (const line of lines) {
+      const matchAmount = line.match(/(?:Rs\.?|INR|₹)?\s*([0-9]{3,7}(?:\.[0-9]{1,2})?)/i);
+      if (matchAmount) {
+        const amt = parseFloat(matchAmount[1]);
+        if (amt > 0) {
+          const parts = line.split(/,|\t|\||\s{2,}/);
+          const namePart = parts[0] || 'Student';
+          extractedRows.push({
+            student_identifier: namePart,
+            amount: amt,
+            payment_mode: line.toLowerCase().includes('upi') ? 'UPI' : 'Cash',
+            fee_head_or_notes: 'PDF Fee Collection'
+          });
+        }
+      }
+    }
   }
 
   // Intelligent matching & dummy text enrichment against student directory
