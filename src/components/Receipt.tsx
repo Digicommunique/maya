@@ -1,5 +1,6 @@
 import React from 'react';
 import { format } from 'date-fns';
+import { formatAppDate } from '../utils/dateFormat';
 import { Transaction, OrgSettings } from '../types';
 import { DEFAULT_MAYA_LOGO_BASE64 } from '../assets/logoData';
 
@@ -16,15 +17,8 @@ export default function Receipt({ transaction, settings }: ReceiptProps) {
   const orgPhone = settings?.phone || '6390777701, 6390777702';
 
   const txDateFormatted = (() => {
-    const raw = transaction?.created_at || transaction?.transaction_date;
-    if (!raw) return format(new Date(), 'dd-MM-yyyy HH:mm');
-    try {
-      const d = new Date(raw);
-      if (isNaN(d.getTime())) return String(raw);
-      return format(d, 'dd-MM-yyyy HH:mm');
-    } catch {
-      return String(raw);
-    }
+    const raw = transaction?.transaction_date || transaction?.created_at;
+    return formatAppDate(raw, true);
   })();
 
   const txIdNum = Number(transaction?.id) || 0;

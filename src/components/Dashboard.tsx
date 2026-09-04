@@ -41,31 +41,11 @@ import {
 } from 'recharts';
 
 import CourseSessionStudentBreakdown from './CourseSessionStudentBreakdown';
+import { formatAppDate, parseAppDate } from '../utils/dateFormat';
 
 export default function Dashboard({ setActiveTab, user }: { setActiveTab: (tab: string) => void, user: any }) {
-  const safeFormatDate = (dateVal: any, pattern: string = 'MMM dd, yyyy • hh:mm a') => {
-    if (!dateVal) return 'N/A';
-    try {
-      let d: Date | null = null;
-      if (typeof dateVal === 'string') {
-        const str = dateVal.trim();
-        const dmYMatch = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
-        if (dmYMatch) {
-          const day = parseInt(dmYMatch[1], 10);
-          const month = parseInt(dmYMatch[2], 10) - 1;
-          const year = parseInt(dmYMatch[3], 10);
-          d = new Date(year, month, day, 12, 0, 0);
-        } else {
-          d = new Date(str);
-        }
-      } else {
-        d = new Date(dateVal);
-      }
-      if (!d || isNaN(d.getTime())) return String(dateVal);
-      return format(d, pattern);
-    } catch {
-      return String(dateVal);
-    }
+  const safeFormatDate = (dateVal: any, pattern?: string) => {
+    return formatAppDate(dateVal, true);
   };
 
   const [summary, setSummary] = useState<any>(null);
@@ -146,13 +126,10 @@ export default function Dashboard({ setActiveTab, user }: { setActiveTab: (tab: 
     }
 
     txs.forEach((t: any) => {
-      const dStr = t.created_at || t.transaction_date;
-      if (dStr) {
-        const d = new Date(dStr);
-        if (!isNaN(d.getTime())) {
-          const label = format(d, 'MMM yyyy');
-          monthlyMap[label] = (monthlyMap[label] || 0) + Number(t.amount || 0);
-        }
+      const d = parseAppDate(t.transaction_date || t.created_at);
+      if (d) {
+        const label = format(d, 'MMM yyyy');
+        monthlyMap[label] = (monthlyMap[label] || 0) + Number(t.amount || 0);
       }
     });
 
@@ -432,7 +409,7 @@ export default function Dashboard({ setActiveTab, user }: { setActiveTab: (tab: 
                       )}
                     </div>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      {safeFormatDate(tx.created_at || tx.transaction_date, 'MMM dd, yyyy • hh:mm a')}
+                      {formatAppDate(tx.transaction_date || tx.created_at, true)}
                     </p>
                   </div>
                 </div>
@@ -635,7 +612,7 @@ export default function Dashboard({ setActiveTab, user }: { setActiveTab: (tab: 
                               </span>
                             </td>
                             <td className="py-3 px-4 text-slate-500">
-                              {tx.edited_at ? new Date(tx.edited_at).toLocaleString() : 'N/A'}
+                              {formatAppDate(tx.edited_at, true)}
                             </td>
                             <td className="py-3 px-4 text-center">
                               <button
@@ -688,7 +665,7 @@ export default function Dashboard({ setActiveTab, user }: { setActiveTab: (tab: 
                               </span>
                             </td>
                             <td className="py-3 px-4 text-slate-500">
-                              {s.edited_at ? new Date(s.edited_at).toLocaleString() : 'N/A'}
+                              {formatAppDate(s.edited_at, true)}
                             </td>
                             <td className="py-3 px-4 text-center">
                               <button
@@ -735,7 +712,7 @@ export default function Dashboard({ setActiveTab, user }: { setActiveTab: (tab: 
                     <h3 className="text-lg font-bold">Transaction #DC-{1000 + viewingAuditTx.id}</h3>
                   </div>
                   <p className="text-xs text-amber-100 mt-0.5">
-                    Edited by <span className="font-bold">{viewingAuditTx.edited_by || 'Accountant'}</span> on {viewingAuditTx.edited_at ? new Date(viewingAuditTx.edited_at).toLocaleString() : 'N/A'}
+                    Edited by <span className="font-bold">{viewingAuditTx.edited_by || 'Accountant'}</span> on {formatAppDate(viewingAuditTx.edited_at, true)}
                   </p>
                 </div>
                 <button 
@@ -820,7 +797,7 @@ export default function Dashboard({ setActiveTab, user }: { setActiveTab: (tab: 
                     <h3 className="text-lg font-bold">{cleanVal(viewingAuditStudent.name)}</h3>
                   </div>
                   <p className="text-xs text-amber-100 mt-0.5">
-                    Edited by <span className="font-bold">{viewingAuditStudent.edited_by || 'Accountant'}</span> on {viewingAuditStudent.edited_at ? new Date(viewingAuditStudent.edited_at).toLocaleString() : 'N/A'}
+                    Edited by <span className="font-bold">{viewingAuditStudent.edited_by || 'Accountant'}</span> on {formatAppDate(viewingAuditStudent.edited_at, true)}
                   </p>
                 </div>
                 <button 

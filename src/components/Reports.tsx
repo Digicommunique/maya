@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { Transaction } from '../types';
 import { format, subMonths, addMonths } from 'date-fns';
+import { formatAppDate, parseAppDate } from '../utils/dateFormat';
 import { cn } from '../lib/utils';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -170,13 +171,10 @@ export default function Reports() {
     }
 
     transactions.forEach(t => {
-      const dStr = t.created_at || t.transaction_date;
-      if (dStr) {
-        const d = new Date(dStr);
-        if (!isNaN(d.getTime())) {
-          const label = format(d, 'MMM yyyy');
-          monthlyMap[label] = (monthlyMap[label] || 0) + Number(t.amount || 0);
-        }
+      const d = parseAppDate(t.transaction_date || t.created_at);
+      if (d) {
+        const label = format(d, 'MMM yyyy');
+        monthlyMap[label] = (monthlyMap[label] || 0) + Number(t.amount || 0);
       }
     });
 
@@ -236,39 +234,12 @@ export default function Reports() {
     };
   }, [transactions, ledger]);
 
-  const safeFormatDate = (dateVal: any, pattern: string = 'yyyy-MM-dd HH:mm') => {
-    if (!dateVal) return 'N/A';
-    try {
-      const d = new Date(dateVal);
-      if (isNaN(d.getTime())) return String(dateVal);
-      return format(d, pattern);
-    } catch {
-      return String(dateVal);
-    }
+  const safeFormatDate = (dateVal: any, pattern?: string) => {
+    return formatAppDate(dateVal, true);
   };
 
-  const formatTxDate = (dateStr: string) => {
-    try {
-      if (!dateStr) return 'N/A';
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return String(dateStr);
-      
-      const month = d.getMonth() + 1;
-      const date = d.getDate();
-      const year = d.getFullYear();
-      
-      let hours = d.getHours();
-      const minutes = d.getMinutes().toString().padStart(2, '0');
-      const seconds = d.getSeconds().toString().padStart(2, '0');
-      const ampm = hours >= 12 ? 'PM' : 'AM';
-      
-      hours = hours % 12;
-      hours = hours ? hours : 12; // the hour '0' should be '12'
-      
-      return `${month}/${date}/${year} ${hours}:${minutes}:${seconds} ${ampm}`;
-    } catch (e) {
-      return String(dateStr || 'N/A');
-    }
+  const formatTxDate = (dateStr: any) => {
+    return formatAppDate(dateStr, true);
   };
 
   const refreshData = async () => {
@@ -332,7 +303,7 @@ export default function Reports() {
     reader.onload = async (evt) => {
       try {
         const arrayBuffer = evt.target?.result;
-        const wb = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
+        const wb = XLSX.read(arrayBuffer, { type: 'array', cellDates: false });
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
         const data = XLSX.utils.sheet_to_json(ws);
@@ -388,38 +359,8 @@ export default function Reports() {
         };
 
         const parseFlexibleDate = (dateVal: any): string => {
-          if (!dateVal) return new Date().toISOString();
-
-          if (dateVal instanceof Date) {
-            if (!isNaN(dateVal.getTime())) return dateVal.toISOString();
-          }
-
-          if (typeof dateVal === 'number') {
-            const jsDate = new Date(Math.round((dateVal - 25569) * 86400 * 1000));
-            if (!isNaN(jsDate.getTime())) return jsDate.toISOString();
-          }
-
-          const str = dateVal.toString().trim();
-          if (!str) return new Date().toISOString();
-
-          // Match DD-MM-YYYY or DD/MM/YYYY or DD.MM.YYYY
-          const dmYMatch = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
-          if (dmYMatch) {
-            const day = parseInt(dmYMatch[1], 10);
-            const month = parseInt(dmYMatch[2], 10) - 1;
-            const year = parseInt(dmYMatch[3], 10);
-            if (month >= 0 && month <= 11 && day >= 1 && day <= 31) {
-              const d = new Date(Date.UTC(year, month, day, 12, 0, 0));
-              if (!isNaN(d.getTime())) return d.toISOString();
-            }
-          }
-
-          const directDate = new Date(str);
-          if (!isNaN(directDate.getTime())) {
-            return directDate.toISOString();
-          }
-
-          return new Date().toISOString();
+          const d = parseAppDate(dateVal);
+          return d ? d.toISOString() : new Date().toISOString();
         };
 
         let processed = 0;
@@ -1188,7 +1129,7 @@ export default function Reports() {
     if (activeView === 'collections') {
       const headers = ['Date', 'Student', 'Roll No', 'Amount', 'Mode', 'Txn ID', 'Term'];
       const rows = filteredTransactions.map(tx => [
-        tx.created_at ? format(new Date(tx.created_at), 'yyyy-MM-dd') : '',
+        formatAppDate(tx.transaction_date || tx.created_at),
         tx.student_name || '',
         tx.roll_no || '',
         tx.amount || 0,
@@ -1228,7 +1169,7 @@ export default function Reports() {
         startY: 20,
         head: [['Date', 'Student', 'Roll No', 'Amount', 'Mode', 'Txn ID']],
         body: filteredTransactions.map(tx => [
-          tx.created_at ? format(new Date(tx.created_at), 'yyyy-MM-dd') : '',
+          formatAppDate(tx.transaction_date || tx.created_at),
           tx.student_name || '',
           tx.roll_no || '',
           `Rs. ${tx.amount || 0}`,
@@ -1644,7 +1585,7 @@ export default function Reports() {
                 {filteredTransactions.map(tx => (
                   <tr key={tx.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="p-3 border border-slate-200 text-slate-700 text-sm font-medium">{tx.id}</td>
-                    <td className="p-3 border border-slate-200 text-slate-700 text-sm">{formatTxDate(tx.created_at || tx.transaction_date)}</td>
+                    <td className="p-3 border border-slate-200 text-slate-700 text-sm">{formatTxDate(tx.transaction_date || tx.created_at)}</td>
                     <td className="p-3 border border-slate-200 text-slate-800 text-sm font-semibold">
                       <p className={cn(
                         "font-bold flex items-center flex-wrap gap-1",

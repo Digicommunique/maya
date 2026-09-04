@@ -27,6 +27,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Student, FeePlan, Branch, Semester, Session, OrgSettings } from '../types';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
+import { formatAppDate } from '../utils/dateFormat';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -254,15 +255,8 @@ export default function StudentDirectory({ user }: { user?: any }) {
     });
   };
 
-  const safeFormatDate = (dateVal: any, pattern: string = 'yyyy-MM-dd HH:mm') => {
-    if (!dateVal) return 'N/A';
-    try {
-      const d = new Date(dateVal);
-      if (isNaN(d.getTime())) return String(dateVal);
-      return format(d, pattern);
-    } catch {
-      return String(dateVal);
-    }
+  const safeFormatDate = (dateVal: any, pattern?: string) => {
+    return formatAppDate(dateVal, true);
   };
 
   const startEdit = (student: Student) => {
@@ -1300,8 +1294,8 @@ export default function StudentDirectory({ user }: { user?: any }) {
                         </thead>
                         <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
                           {studentTxs.map((tx: any, idx: number) => {
-                            const txDateStr = tx.created_at || tx.transaction_date;
-                            const formattedDate = safeFormatDate(txDateStr, 'yyyy-MM-dd HH:mm');
+                            const txDateStr = tx.transaction_date || tx.created_at;
+                            const formattedDate = formatAppDate(txDateStr, true);
                             return (
                               <tr key={tx.id || idx} className="hover:bg-slate-50/80 transition-colors">
                                 <td className="p-3 font-bold text-slate-900">{formattedDate}</td>

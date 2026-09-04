@@ -42,6 +42,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Student, Transaction, OrgSettings } from '../types';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
+import { formatAppDate, parseAppDate, toInputDateFormat } from '../utils/dateFormat';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import * as XLSX from 'xlsx';
@@ -590,7 +591,7 @@ export default function FeeCollection({ user }: { user?: any }) {
 
     const receiptNo = `RC-${lastTx.id < 100 ? 800 + lastTx.id : lastTx.id}`;
     const amountPaid = (lastTx.amount || 0).toFixed(2);
-    const txDateStr = lastTx.created_at ? format(new Date(lastTx.created_at), 'dd-MM-yyyy HH:mm') : format(new Date(), 'dd-MM-yyyy HH:mm');
+    const txDateStr = formatAppDate(lastTx.transaction_date || lastTx.created_at, true);
 
     let paymentSection = `Amount Paid: ₹${amountPaid}\nPayment Mode: ${cleanVal(lastTx.payment_mode)}\nTransaction ID: ${cleanVal(lastTx.transaction_id || 'N/A')}`;
 
@@ -697,57 +698,7 @@ export default function FeeCollection({ user }: { user?: any }) {
   });
 
   const formatTxDate = (dateVal?: any) => {
-    if (!dateVal) return 'N/A';
-    try {
-      const str = dateVal.toString().trim();
-      if (!str) return 'N/A';
-
-      // YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss
-      const ymdMatch = str.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})(.*)/);
-      if (ymdMatch) {
-        const year = parseInt(ymdMatch[1], 10);
-        const month = parseInt(ymdMatch[2], 10);
-        const day = parseInt(ymdMatch[3], 10);
-        const rest = ymdMatch[4] ? ymdMatch[4].trim() : '';
-        let timeStr = '';
-        if (rest && (rest.includes('T') || rest.includes(':') || rest.includes(' '))) {
-          const d = new Date(str);
-          if (!isNaN(d.getTime())) {
-            let hours = d.getHours();
-            const minutes = d.getMinutes().toString().padStart(2, '0');
-            const seconds = d.getSeconds().toString().padStart(2, '0');
-            const ampm = hours >= 12 ? 'PM' : 'AM';
-            hours = hours % 12 || 12;
-            timeStr = ` ${hours}:${minutes}:${seconds} ${ampm}`;
-          }
-        }
-        return `${month}/${day}/${year}${timeStr}`;
-      }
-
-      // DD-MM-YYYY or DD/MM/YYYY or DD.MM.YYYY
-      const dmYMatch = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})(.*)/);
-      if (dmYMatch) {
-        const day = parseInt(dmYMatch[1], 10);
-        const month = parseInt(dmYMatch[2], 10);
-        const year = parseInt(dmYMatch[3], 10);
-        const rest = dmYMatch[4] ? dmYMatch[4].trim() : '';
-        return `${month}/${day}/${year}${rest ? ' ' + rest : ''}`;
-      }
-
-      const d = new Date(str);
-      if (isNaN(d.getTime())) return str;
-      const month = d.getMonth() + 1;
-      const date = d.getDate();
-      const year = d.getFullYear();
-      let hours = d.getHours();
-      const minutes = d.getMinutes().toString().padStart(2, '0');
-      const seconds = d.getSeconds().toString().padStart(2, '0');
-      const ampm = hours >= 12 ? 'PM' : 'AM';
-      hours = hours % 12 || 12;
-      return `${month}/${date}/${year} ${hours}:${minutes}:${seconds} ${ampm}`;
-    } catch (e) {
-      return String(dateVal);
-    }
+    return formatAppDate(dateVal, true);
   };
 
   const cleanVal = (val: any) => val ? val.toString().replace(/^\[Auto\]\s*/, '') : '';
@@ -840,37 +791,7 @@ export default function FeeCollection({ user }: { user?: any }) {
   };
 
   const getTxDateString = (tx: any): string => {
-    const val = tx.transaction_date || tx.created_at;
-    if (!val) return '';
-    const str = val.toString().trim();
-
-    // 1. ISO or YYYY-MM-DD format
-    const ymdMatch = str.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/);
-    if (ymdMatch) {
-      const year = ymdMatch[1];
-      const month = ymdMatch[2].padStart(2, '0');
-      const day = ymdMatch[3].padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    }
-
-    // 2. DD-MM-YYYY or DD/MM/YYYY
-    const dmYMatch = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
-    if (dmYMatch) {
-      const day = dmYMatch[1].padStart(2, '0');
-      const month = dmYMatch[2].padStart(2, '0');
-      const year = dmYMatch[3];
-      return `${year}-${month}-${day}`;
-    }
-
-    // 3. Date fallback with UTC extraction
-    const d = new Date(str);
-    if (!isNaN(d.getTime())) {
-      const year = d.getUTCFullYear();
-      const month = (d.getUTCMonth() + 1).toString().padStart(2, '0');
-      const day = d.getUTCDate().toString().padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    }
-    return '';
+    return toInputDateFormat(tx.transaction_date || tx.created_at);
   };
 
   const filteredRecentTxs = (recentTxs || []).filter(tx => {
@@ -1574,7 +1495,14 @@ export default function FeeCollection({ user }: { user?: any }) {
                         </div>
 
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Transaction Date *</label>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+                            <span>Transaction Date *</span>
+                            {entry.transaction_date && (
+                              <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded normal-case tracking-normal">
+                                {formatAppDate(entry.transaction_date)}
+                              </span>
+                            )}
+                          </label>
                           <input 
                             required
                             type="date"
@@ -2323,7 +2251,14 @@ export default function FeeCollection({ user }: { user?: any }) {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Transaction Date</label>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                      <span>Transaction Date</span>
+                      {editTxForm.transaction_date && (
+                        <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded normal-case tracking-normal">
+                          {formatAppDate(editTxForm.transaction_date)}
+                        </span>
+                      )}
+                    </label>
                     <input 
                       type="date"
                       value={editTxForm.transaction_date}
@@ -2420,7 +2355,7 @@ export default function FeeCollection({ user }: { user?: any }) {
                         { label: 'Payment Mode', key: 'payment_mode', current: cleanVal(viewingAuditTx.payment_mode || 'N/A'), prev: viewingAuditTx.previous_data ? cleanVal(viewingAuditTx.previous_data.payment_mode || 'N/A') : 'N/A' },
                         { label: 'Txn / UPI ID', key: 'transaction_id', current: cleanVal(viewingAuditTx.transaction_id || 'N/A'), prev: viewingAuditTx.previous_data ? cleanVal(viewingAuditTx.previous_data.transaction_id || 'N/A') : 'N/A' },
                         { label: 'Academic Term', key: 'academic_term', current: cleanVal(viewingAuditTx.academic_term || 'N/A'), prev: viewingAuditTx.previous_data ? cleanVal(viewingAuditTx.previous_data.academic_term || 'N/A') : 'N/A' },
-                        { label: 'Transaction Date', key: 'transaction_date', current: viewingAuditTx.transaction_date || 'N/A', prev: viewingAuditTx.previous_data ? viewingAuditTx.previous_data.transaction_date || 'N/A' : 'N/A' },
+                        { label: 'Transaction Date', key: 'transaction_date', current: formatAppDate(viewingAuditTx.transaction_date) || 'N/A', prev: viewingAuditTx.previous_data ? (formatAppDate(viewingAuditTx.previous_data.transaction_date) || 'N/A') : 'N/A' },
                         { label: 'Bank Account', key: 'bank_account', current: cleanVal(viewingAuditTx.bank_account || 'N/A'), prev: viewingAuditTx.previous_data ? cleanVal(viewingAuditTx.previous_data.bank_account || 'N/A') : 'N/A' },
                       ].map(f => {
                         const changed = f.prev !== f.current;
