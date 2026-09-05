@@ -145,3 +145,33 @@ export function toInputDateFormat(val: any): string {
     return format(d, 'yyyy-MM-dd');
   }
 }
+
+/**
+ * Returns formatted numeric date in Indian standard format: DD-MM-YYYY (e.g. 05-09-2026)
+ * Computed strictly in Asia/Kolkata timezone.
+ */
+export function formatDateDDMMYYYY(val: any): string {
+  const d = parseAppDate(val);
+  if (!d) return val ? String(val) : '';
+  
+  try {
+    const formatter = new Intl.DateTimeFormat('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+    const parts = formatter.formatToParts(d);
+    let day = '01';
+    let month = '01';
+    let year = '2026';
+    for (const part of parts) {
+      if (part.type === 'day') day = part.value.padStart(2, '0');
+      if (part.type === 'month') month = part.value.padStart(2, '0');
+      if (part.type === 'year') year = part.value;
+    }
+    return `${day}-${month}-${year}`;
+  } catch {
+    return format(d, 'dd-MM-yyyy');
+  }
+}

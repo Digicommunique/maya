@@ -41,7 +41,7 @@ import {
 } from 'recharts';
 
 import CourseSessionStudentBreakdown from './CourseSessionStudentBreakdown';
-import { formatAppDate, parseAppDate } from '../utils/dateFormat';
+import { formatAppDate, parseAppDate, formatDateDDMMYYYY } from '../utils/dateFormat';
 
 export default function Dashboard({ setActiveTab, user }: { setActiveTab: (tab: string) => void, user: any }) {
   const safeFormatDate = (dateVal: any, pattern?: string) => {
@@ -408,9 +408,14 @@ export default function Dashboard({ setActiveTab, user }: { setActiveTab: (tab: 
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      {formatAppDate(tx.transaction_date || tx.created_at, true)}
-                    </p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-xs font-semibold text-slate-700">
+                        {formatAppDate(tx.transaction_date || tx.created_at)}
+                      </span>
+                      <span className="text-[11px] font-mono text-slate-400">
+                        • {formatDateDDMMYYYY(tx.transaction_date || tx.created_at)}
+                      </span>
+                    </div>
                   </div>
                 </div>
                 <div className="text-right flex-shrink-0">

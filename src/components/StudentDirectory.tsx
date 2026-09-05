@@ -27,7 +27,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Student, FeePlan, Branch, Semester, Session, OrgSettings } from '../types';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
-import { formatAppDate } from '../utils/dateFormat';
+import { formatAppDate, formatDateDDMMYYYY } from '../utils/dateFormat';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -1295,10 +1295,12 @@ export default function StudentDirectory({ user }: { user?: any }) {
                         <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
                           {studentTxs.map((tx: any, idx: number) => {
                             const txDateStr = tx.transaction_date || tx.created_at;
-                            const formattedDate = formatAppDate(txDateStr, true);
                             return (
                               <tr key={tx.id || idx} className="hover:bg-slate-50/80 transition-colors">
-                                <td className="p-3 font-bold text-slate-900">{formattedDate}</td>
+                                <td className="p-3 font-bold text-slate-900 whitespace-nowrap">
+                                  <div className="font-bold text-slate-800">{formatAppDate(txDateStr)}</div>
+                                  <div className="text-[10px] font-mono text-slate-500 font-medium mt-0.5">{formatDateDDMMYYYY(txDateStr)}</div>
+                                </td>
                                 <td className="p-3">{tx.academic_term || 'Sem 1'}</td>
                                 <td className="p-3 font-mono text-slate-600">{tx.transaction_id || 'CASH'}</td>
                                 <td className="p-3">{tx.payment_mode || 'Cash'}</td>

@@ -42,7 +42,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Student, Transaction, OrgSettings } from '../types';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
-import { formatAppDate, parseAppDate, toInputDateFormat } from '../utils/dateFormat';
+import { formatAppDate, parseAppDate, toInputDateFormat, formatDateDDMMYYYY } from '../utils/dateFormat';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import * as XLSX from 'xlsx';
@@ -1995,7 +1995,7 @@ export default function FeeCollection({ user }: { user?: any }) {
             <div className="flex items-center justify-between text-xs text-slate-600 bg-blue-50/60 px-3.5 py-2 rounded-xl border border-blue-100 flex-1">
               <span className="font-medium">
                 Showing <strong className="font-bold text-blue-900">{filteredRecentTxs.length}</strong> transaction{filteredRecentTxs.length !== 1 ? 's' : ''}
-                {historyStartDate && historyEndDate ? ` from ${historyStartDate} to ${historyEndDate}` : (historyStartDate ? ` from ${historyStartDate}` : (historyEndDate ? ` up to ${historyEndDate}` : ''))}
+                {historyStartDate && historyEndDate ? ` from ${formatAppDate(historyStartDate)} to ${formatAppDate(historyEndDate)}` : (historyStartDate ? ` from ${formatAppDate(historyStartDate)}` : (historyEndDate ? ` up to ${formatAppDate(historyEndDate)}` : ''))}
                 {historySearch ? ` matching "${historySearch}"` : ''}
               </span>
               <button
@@ -2075,8 +2075,13 @@ export default function FeeCollection({ user }: { user?: any }) {
                         </span>
                       )}
                     </td>
-                    <td className="py-3 px-4 text-slate-600 font-medium">
-                      {formatTxDate(tx.transaction_date || tx.created_at)}
+                    <td className="py-3 px-4 text-slate-600 font-medium whitespace-nowrap">
+                      <div className="font-bold text-slate-800">
+                        {formatAppDate(tx.transaction_date || tx.created_at)}
+                      </div>
+                      <div className="text-[10px] font-mono text-slate-500 font-medium mt-0.5">
+                        {formatDateDDMMYYYY(tx.transaction_date || tx.created_at)}
+                      </div>
                     </td>
                     <td className="py-3 px-4">
                       <p className="font-bold text-slate-800">{cleanVal(tx.student_name || tx.student?.name || 'Student')}</p>

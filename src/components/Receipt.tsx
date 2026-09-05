@@ -1,6 +1,6 @@
 import React from 'react';
 import { format } from 'date-fns';
-import { formatAppDate } from '../utils/dateFormat';
+import { formatAppDate, formatDateDDMMYYYY } from '../utils/dateFormat';
 import { Transaction, OrgSettings } from '../types';
 import { DEFAULT_MAYA_LOGO_BASE64 } from '../assets/logoData';
 
@@ -18,7 +18,12 @@ export default function Receipt({ transaction, settings }: ReceiptProps) {
 
   const txDateFormatted = (() => {
     const raw = transaction?.transaction_date || transaction?.created_at;
-    return formatAppDate(raw, true);
+    return formatAppDate(raw);
+  })();
+
+  const txDateNumeric = (() => {
+    const raw = transaction?.transaction_date || transaction?.created_at;
+    return formatDateDDMMYYYY(raw);
   })();
 
   const txIdNum = Number(transaction?.id) || 0;
@@ -61,8 +66,9 @@ export default function Receipt({ transaction, settings }: ReceiptProps) {
           <h2 className="text-sm font-black text-slate-900 uppercase tracking-wide">
             PAYMENT RECEIPT
           </h2>
-          <p className="text-xs font-medium text-slate-700 mt-1">
-            Date : {txDateFormatted}
+          <p className="text-xs font-semibold text-slate-800 mt-1">
+            Date: <span className="font-bold text-slate-900">{txDateFormatted}</span>
+            {txDateNumeric && <span className="text-slate-500 font-normal ml-1">({txDateNumeric})</span>}
           </p>
           {transaction.is_edited && (
             <div className="mt-2 inline-block px-2 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 rounded text-[9px] font-bold uppercase tracking-wider">
@@ -160,7 +166,7 @@ export default function Receipt({ transaction, settings }: ReceiptProps) {
                       <td className="py-2 px-3 font-bold text-slate-400">{idx + 1}</td>
                       <td className="py-2 px-3 text-slate-900 font-bold">{cleanVal(st.payment_mode)}</td>
                       <td className="py-2 px-3 font-mono text-slate-700">{cleanVal(st.transaction_id || 'N/A')}</td>
-                      <td className="py-2 px-3 text-slate-600">{st.transaction_date || 'N/A'}</td>
+                      <td className="py-2 px-3 text-slate-600">{formatAppDate(st.transaction_date) || 'N/A'}</td>
                       <td className="py-2 px-3 text-right font-bold text-slate-900">₹ {(Number(st.amount) || 0).toFixed(2)}</td>
                     </tr>
                   ))}

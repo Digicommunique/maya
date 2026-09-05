@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import { Transaction } from '../types';
 import { format, subMonths, addMonths } from 'date-fns';
-import { formatAppDate, parseAppDate } from '../utils/dateFormat';
+import { formatAppDate, parseAppDate, formatDateDDMMYYYY } from '../utils/dateFormat';
 import { cn } from '../lib/utils';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -1110,12 +1110,12 @@ export default function Reports() {
   const filteredTransactions = (transactions || []).filter(tx => {
     const matchesSearch = 
       (tx.student_name || '').toLowerCase().includes(search.toLowerCase()) || 
-      (tx.transaction_id || '').toLowerCase().includes(search.toLowerCase()) ||
+      (tx.transaction_id || '').toLowerCase().includes(search.toLowerCase()) || 
       (tx.roll_no || '').toLowerCase().includes(search.toLowerCase());
     
-    const txDate = new Date(tx.created_at);
-    const matchesFrom = !dateRange.from || txDate >= new Date(dateRange.from);
-    const matchesTo = !dateRange.to || txDate <= new Date(dateRange.to);
+    const txDate = parseAppDate(tx.transaction_date || tx.created_at);
+    const matchesFrom = !dateRange.from || (txDate && txDate >= new Date(`${dateRange.from}T00:00:00`));
+    const matchesTo = !dateRange.to || (txDate && txDate <= new Date(`${dateRange.to}T23:59:59`));
 
     return matchesSearch && matchesFrom && matchesTo;
   });
@@ -1127,9 +1127,10 @@ export default function Reports() {
 
   const exportExcel = () => {
     if (activeView === 'collections') {
-      const headers = ['Date', 'Student', 'Roll No', 'Amount', 'Mode', 'Txn ID', 'Term'];
+      const headers = ['Date', 'Numeric Date (DD-MM-YYYY)', 'Student', 'Roll No', 'Amount', 'Mode', 'Txn ID', 'Term'];
       const rows = filteredTransactions.map(tx => [
         formatAppDate(tx.transaction_date || tx.created_at),
+        formatDateDDMMYYYY(tx.transaction_date || tx.created_at),
         tx.student_name || '',
         tx.roll_no || '',
         tx.amount || 0,
@@ -1167,9 +1168,9 @@ export default function Reports() {
       doc.text("Financial Collections Report", 14, 15);
       autoTable(doc, {
         startY: 20,
-        head: [['Date', 'Student', 'Roll No', 'Amount', 'Mode', 'Txn ID']],
+        head: [['Date (DD-MM-YYYY)', 'Student', 'Roll No', 'Amount', 'Mode', 'Txn ID']],
         body: filteredTransactions.map(tx => [
-          formatAppDate(tx.transaction_date || tx.created_at),
+          `${formatAppDate(tx.transaction_date || tx.created_at)}\n(${formatDateDDMMYYYY(tx.transaction_date || tx.created_at)})`,
           tx.student_name || '',
           tx.roll_no || '',
           `Rs. ${tx.amount || 0}`,
@@ -1469,21 +1470,37 @@ export default function Reports() {
             />
           </div>
 
-          <div className="w-48 relative">
+          <div className="w-52 relative">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">From Date</span>
+              {dateRange.from && (
+                <span className="text-[9px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded normal-case tracking-normal">
+                  {formatAppDate(dateRange.from)}
+                </span>
+              )}
+            </div>
             <input 
               type="date"
               value={dateRange.from}
               onChange={e => setDateRange({...dateRange, from: e.target.value})}
-              className="w-full px-4 py-2.5 rounded-lg border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white font-medium"
+              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white font-medium text-slate-700"
             />
           </div>
 
-          <div className="w-48 relative">
+          <div className="w-52 relative">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">To Date</span>
+              {dateRange.to && (
+                <span className="text-[9px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded normal-case tracking-normal">
+                  {formatAppDate(dateRange.to)}
+                </span>
+              )}
+            </div>
             <input 
               type="date"
               value={dateRange.to}
               onChange={e => setDateRange({...dateRange, to: e.target.value})}
-              className="w-full px-4 py-2.5 rounded-lg border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white font-medium"
+              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white font-medium text-slate-700"
             />
           </div>
 
@@ -1585,7 +1602,14 @@ export default function Reports() {
                 {filteredTransactions.map(tx => (
                   <tr key={tx.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="p-3 border border-slate-200 text-slate-700 text-sm font-medium">{tx.id}</td>
-                    <td className="p-3 border border-slate-200 text-slate-700 text-sm">{formatTxDate(tx.transaction_date || tx.created_at)}</td>
+                    <td className="p-3 border border-slate-200 text-slate-700 text-sm whitespace-nowrap">
+                      <div className="font-bold text-slate-800">
+                        {formatAppDate(tx.transaction_date || tx.created_at)}
+                      </div>
+                      <div className="text-[11px] font-mono text-slate-500 font-medium mt-0.5">
+                        {formatDateDDMMYYYY(tx.transaction_date || tx.created_at)}
+                      </div>
+                    </td>
                     <td className="p-3 border border-slate-200 text-slate-800 text-sm font-semibold">
                       <p className={cn(
                         "font-bold flex items-center flex-wrap gap-1",
@@ -1809,11 +1833,13 @@ export default function Reports() {
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
                                       {txs.map((tx: any, idx: number) => {
-                                        const txDateStr = tx.created_at || tx.transaction_date;
-                                        const formattedDate = safeFormatDate(txDateStr, 'yyyy-MM-dd HH:mm');
+                                        const txDateStr = tx.transaction_date || tx.created_at;
                                         return (
                                           <tr key={tx.id || idx} className="hover:bg-slate-50 transition-colors">
-                                            <td className="p-3 font-semibold text-slate-900">{formattedDate}</td>
+                                            <td className="p-3 whitespace-nowrap">
+                                              <div className="font-semibold text-slate-800">{formatAppDate(txDateStr)}</div>
+                                              <div className="text-[11px] font-mono text-slate-500 font-medium mt-0.5">{formatDateDDMMYYYY(txDateStr)}</div>
+                                            </td>
                                             <td className="p-3">{tx.academic_term || 'Sem 1'}</td>
                                             <td className="p-3 font-mono text-slate-600">{tx.transaction_id || 'CASH'}</td>
                                             <td className="p-3">{tx.payment_mode || 'Cash'}</td>
@@ -2168,7 +2194,14 @@ export default function Reports() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Transaction Date</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+                    <span>Transaction Date *</span>
+                    {editDate && (
+                      <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded normal-case tracking-normal">
+                        {formatAppDate(editDate)}
+                      </span>
+                    )}
+                  </label>
                   <input 
                     type="date"
                     required
