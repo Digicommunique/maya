@@ -26,7 +26,12 @@ import {
   ChevronUp,
   History,
   FileDown,
-  MessageCircle
+  MessageCircle,
+  ArrowDownUp,
+  ArrowDown,
+  ArrowUp,
+  RotateCcw,
+  CalendarDays
 } from 'lucide-react';
 import { Transaction } from '../types';
 import { format, subMonths, addMonths } from 'date-fns';
@@ -70,6 +75,8 @@ export default function Reports() {
   const [settings, setSettings] = useState<OrgSettings | null>(null);
   const [search, setSearch] = useState('');
   const [dateRange, setDateRange] = useState({ from: '', to: '' });
+  const [dateSortOrder, setDateSortOrder] = useState<'desc' | 'asc'>('desc');
+  const [ledgerFilterMode, setLedgerFilterMode] = useState<'all' | 'with_transactions'>('all');
   const [activeView, setActiveView] = useState<'collections' | 'ledger'>('collections');
   const [showAnalytics, setShowAnalytics] = useState(true);
   const [printingTx, setPrintingTx] = useState<Transaction | null>(null);
@@ -1107,28 +1114,191 @@ export default function Reports() {
     }
   };
 
-  const filteredTransactions = (transactions || []).filter(tx => {
-    const matchesSearch = 
-      (tx.student_name || '').toLowerCase().includes(search.toLowerCase()) || 
-      (tx.transaction_id || '').toLowerCase().includes(search.toLowerCase()) || 
-      (tx.roll_no || '').toLowerCase().includes(search.toLowerCase());
-    
-    const txDate = parseAppDate(tx.transaction_date || tx.created_at);
-    const matchesFrom = !dateRange.from || (txDate && txDate >= new Date(`${dateRange.from}T00:00:00`));
-    const matchesTo = !dateRange.to || (txDate && txDate <= new Date(`${dateRange.to}T23:59:59`));
+  const setDatePreset = (preset: 'all' | 'today' | 'yesterday' | 'this_week' | 'this_month' | 'last_month') => {
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const formatYMD = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
-    return matchesSearch && matchesFrom && matchesTo;
-  });
+    if (preset === 'all') {
+      setDateRange({ from: '', to: '' });
+      return;
+    }
+    if (preset === 'today') {
+      const todayStr = formatYMD(now);
+      setDateRange({ from: todayStr, to: todayStr });
+      return;
+    }
+    if (preset === 'yesterday') {
+      const yest = new Date(now);
+      yest.setDate(yest.getDate() - 1);
+      const yestStr = formatYMD(yest);
+      setDateRange({ from: yestStr, to: yestStr });
+      return;
+    }
+    if (preset === 'this_week') {
+      const day = now.getDay();
+      const diff = now.getDate() - (day === 0 ? 6 : day - 1);
+      const monday = new Date(now);
+      monday.setDate(diff);
+      setDateRange({ from: formatYMD(monday), to: formatYMD(now) });
+      return;
+    }
+    if (preset === 'this_month') {
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+      setDateRange({ from: formatYMD(firstDay), to: formatYMD(now) });
+      return;
+    }
+    if (preset === 'last_month') {
+      const firstDay = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const lastDay = new Date(now.getFullYear(), now.getMonth(), 0);
+      setDateRange({ from: formatYMD(firstDay), to: formatYMD(lastDay) });
+      return;
+    }
+  };
 
-  const filteredLedger = (ledger || []).filter(item => 
-    (item.name || '').toLowerCase().includes(search.toLowerCase()) || 
-    (item.roll_no || '').toLowerCase().includes(search.toLowerCase())
-  );
+  const activePreset = useMemo(() => {
+    if (!dateRange.from && !dateRange.to) return 'all';
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const formatYMD = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+    const todayStr = formatYMD(now);
+    if (dateRange.from === todayStr && dateRange.to === todayStr) return 'today';
+
+    const yest = new Date(now);
+    yest.setDate(yest.getDate() - 1);
+    const yestStr = formatYMD(yest);
+    if (dateRange.from === yestStr && dateRange.to === yestStr) return 'yesterday';
+
+    const firstDayThisMonth = formatYMD(new Date(now.getFullYear(), now.getMonth(), 1));
+    if (dateRange.from === firstDayThisMonth && dateRange.to === todayStr) return 'this_month';
+
+    const firstDayLastMonth = formatYMD(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+    const lastDayLastMonth = formatYMD(new Date(now.getFullYear(), now.getMonth(), 0));
+    if (dateRange.from === firstDayLastMonth && dateRange.to === lastDayLastMonth) return 'last_month';
+
+    return 'custom';
+  }, [dateRange]);
+
+  const filteredTransactions = useMemo(() => {
+    const list = (transactions || []).filter(tx => {
+      const searchLower = search.toLowerCase().trim();
+      const matchesSearch = !searchLower || 
+        (tx.student_name || '').toLowerCase().includes(searchLower) || 
+        (tx.transaction_id || '').toLowerCase().includes(searchLower) || 
+        (tx.roll_no || '').toLowerCase().includes(searchLower) ||
+        (tx.payment_mode || '').toLowerCase().includes(searchLower) ||
+        (tx.academic_term || '').toLowerCase().includes(searchLower);
+      
+      const txDate = parseAppDate(tx.transaction_date || tx.created_at);
+      const matchesFrom = !dateRange.from || (txDate && txDate >= new Date(`${dateRange.from}T00:00:00`));
+      const matchesTo = !dateRange.to || (txDate && txDate <= new Date(`${dateRange.to}T23:59:59`));
+
+      return matchesSearch && matchesFrom && matchesTo;
+    });
+
+    return list.sort((a, b) => {
+      const timeA = parseAppDate(a.transaction_date || a.created_at)?.getTime() || 0;
+      const timeB = parseAppDate(b.transaction_date || b.created_at)?.getTime() || 0;
+      if (timeA !== timeB) {
+        return dateSortOrder === 'desc' ? timeB - timeA : timeA - timeB;
+      }
+      return dateSortOrder === 'desc' ? (b.id || 0) - (a.id || 0) : (a.id || 0) - (b.id || 0);
+    });
+  }, [transactions, search, dateRange, dateSortOrder]);
+
+  const processedLedger = useMemo(() => {
+    const hasDateFilter = Boolean(dateRange.from || dateRange.to);
+
+    return (ledger || []).map(item => {
+      const allTxs = item.transactions || [];
+      
+      let periodPaid = 0;
+      const filteredTxs = allTxs.filter((tx: any) => {
+        const txDate = parseAppDate(tx.transaction_date || tx.created_at);
+        const matchesFrom = !dateRange.from || (txDate && txDate >= new Date(`${dateRange.from}T00:00:00`));
+        const matchesTo = !dateRange.to || (txDate && txDate <= new Date(`${dateRange.to}T23:59:59`));
+        if (matchesFrom && matchesTo) {
+          periodPaid += Number(tx.amount || 0);
+          return true;
+        }
+        return false;
+      });
+
+      // Sort student transactions according to dateSortOrder
+      const sortedTxs = [...(hasDateFilter ? filteredTxs : allTxs)].sort((a: any, b: any) => {
+        const tA = parseAppDate(a.transaction_date || a.created_at)?.getTime() || 0;
+        const tB = parseAppDate(b.transaction_date || b.created_at)?.getTime() || 0;
+        return dateSortOrder === 'desc' ? tB - tA : tA - tB;
+      });
+
+      const txTimes = allTxs
+        .map((t: any) => parseAppDate(t.transaction_date || t.created_at)?.getTime() || 0)
+        .filter((t: number) => t > 0);
+      const latestTxTime = txTimes.length > 0 ? Math.max(...txTimes) : 0;
+      const earliestTxTime = txTimes.length > 0 ? Math.min(...txTimes) : 0;
+
+      const latestTx = allTxs.find((t: any) => {
+        const time = parseAppDate(t.transaction_date || t.created_at)?.getTime() || 0;
+        return time === latestTxTime;
+      });
+      const latestTxDateStr = latestTx ? (latestTx.transaction_date || latestTx.created_at) : null;
+
+      return {
+        ...item,
+        periodPaid: hasDateFilter ? periodPaid : item.total_paid,
+        hasTxInPeriod: filteredTxs.length > 0,
+        periodTxCount: filteredTxs.length,
+        latestTxTime,
+        earliestTxTime,
+        latestTxDateStr,
+        displayedTransactions: sortedTxs
+      };
+    });
+  }, [ledger, dateRange, dateSortOrder]);
+
+  const filteredLedger = useMemo(() => {
+    const hasDateFilter = Boolean(dateRange.from || dateRange.to);
+
+    const list = processedLedger.filter(item => {
+      const searchLower = search.toLowerCase().trim();
+      const matchesSearch = !searchLower ||
+        (item.name || '').toLowerCase().includes(searchLower) || 
+        (item.roll_no || '').toLowerCase().includes(searchLower) ||
+        (item.plan_name || '').toLowerCase().includes(searchLower) ||
+        (item.phone || '').toLowerCase().includes(searchLower);
+
+      if (!matchesSearch) return false;
+
+      if (hasDateFilter && ledgerFilterMode === 'with_transactions') {
+        return item.hasTxInPeriod;
+      }
+
+      return true;
+    });
+
+    return list.sort((a, b) => {
+      if (dateSortOrder === 'desc') {
+        if (a.latestTxTime !== b.latestTxTime) {
+          return b.latestTxTime - a.latestTxTime;
+        }
+        return (b.total_paid || 0) - (a.total_paid || 0);
+      } else {
+        if (a.earliestTxTime !== b.earliestTxTime) {
+          if (a.earliestTxTime === 0) return 1;
+          if (b.earliestTxTime === 0) return -1;
+          return a.earliestTxTime - b.earliestTxTime;
+        }
+        return (a.total_paid || 0) - (b.total_paid || 0);
+      }
+    });
+  }, [processedLedger, search, dateRange, ledgerFilterMode, dateSortOrder]);
 
   const exportExcel = () => {
     if (activeView === 'collections') {
-      const headers = ['Date', 'Numeric Date (DD-MM-YYYY)', 'Student', 'Roll No', 'Amount', 'Mode', 'Txn ID', 'Term'];
+      const headers = ['ID', 'Date', 'Numeric Date (DD-MM-YYYY)', 'Student', 'Roll No', 'Amount', 'Mode', 'Txn ID', 'Term'];
       const rows = filteredTransactions.map(tx => [
+        tx.id,
         formatAppDate(tx.transaction_date || tx.created_at),
         formatDateDDMMYYYY(tx.transaction_date || tx.created_at),
         tx.student_name || '',
@@ -1141,15 +1311,29 @@ export default function Reports() {
       const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Collections");
-      XLSX.writeFile(wb, `Collections_Report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+      XLSX.writeFile(wb, `Collections_Report_${dateSortOrder === 'desc' ? 'NewestFirst' : 'OldestFirst'}_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
     } else {
-      const headers = ['Student', 'Roll No', 'Fee Plan', 'Total Due', 'Total Paid', 'Balance'];
+      const hasDateFilter = Boolean(dateRange.from || dateRange.to);
+      const headers = hasDateFilter 
+        ? ['Student', 'Roll No', 'Fee Plan', 'Latest Payment Date', 'Total Due', 'Paid in Period', 'Total Paid', 'Balance']
+        : ['Student', 'Roll No', 'Fee Plan', 'Latest Payment Date', 'Total Due', 'Total Paid', 'Balance'];
       const rows = filteredLedger.map(item => {
         const balance = (item.total_due || 0) - (item.total_paid || 0);
-        return [
+        const latestDate = item.latestTxDateStr ? formatDateDDMMYYYY(item.latestTxDateStr) : 'No payments';
+        return hasDateFilter ? [
           item.name || '',
           item.roll_no || '',
           item.plan_name || 'No Plan',
+          latestDate,
+          item.total_due || 0,
+          item.periodPaid || 0,
+          item.total_paid || 0,
+          balance
+        ] : [
+          item.name || '',
+          item.roll_no || '',
+          item.plan_name || 'No Plan',
+          latestDate,
           item.total_due || 0,
           item.total_paid || 0,
           balance
@@ -1158,14 +1342,14 @@ export default function Reports() {
       const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Ledger_Dues");
-      XLSX.writeFile(wb, `Ledger_Dues_Report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+      XLSX.writeFile(wb, `Ledger_Dues_Report_${dateSortOrder === 'desc' ? 'NewestFirst' : 'OldestFirst'}_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
     }
   };
 
   const exportPDF = () => {
     const doc = new jsPDF();
     if (activeView === 'collections') {
-      doc.text("Financial Collections Report", 14, 15);
+      doc.text(`Financial Collections Report (${dateSortOrder === 'desc' ? 'Newest First' : 'Oldest First'})`, 14, 15);
       autoTable(doc, {
         startY: 20,
         head: [['Date (DD-MM-YYYY)', 'Student', 'Roll No', 'Amount', 'Mode', 'Txn ID']],
@@ -1178,9 +1362,9 @@ export default function Reports() {
           tx.transaction_id || '-'
         ]),
       });
-      doc.save(`Collections_Report_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+      doc.save(`Collections_Report_${dateSortOrder === 'desc' ? 'NewestFirst' : 'OldestFirst'}_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
     } else {
-      doc.text("Student Ledger & Dues Report", 14, 15);
+      doc.text(`Student Ledger & Dues Report (${dateSortOrder === 'desc' ? 'Newest First' : 'Oldest First'})`, 14, 15);
       autoTable(doc, {
         startY: 20,
         head: [['Student', 'Roll No', 'Fee Plan', 'Total Due', 'Total Paid', 'Balance']],
@@ -1191,16 +1375,27 @@ export default function Reports() {
             item.roll_no || '',
             item.plan_name || 'No Plan',
             `Rs. ${item.total_due || 0}`,
-            `Rs. ${item.total_paid || 0}`,
+            `Rs. ${(dateRange.from || dateRange.to ? item.periodPaid : item.total_paid) || 0}`,
             `Rs. ${balance}`
           ];
         }),
       });
-      doc.save(`Ledger_Dues_Report_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+      doc.save(`Ledger_Dues_Report_${dateSortOrder === 'desc' ? 'NewestFirst' : 'OldestFirst'}_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
     }
   };
 
-  const totalAmount = filteredTransactions.reduce((sum, tx) => sum + tx.amount, 0);
+  const totalAmount = useMemo(() => {
+    if (activeView === 'collections') {
+      return filteredTransactions.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+    } else {
+      const hasDateFilter = Boolean(dateRange.from || dateRange.to);
+      if (hasDateFilter) {
+        return filteredLedger.reduce((sum, item) => sum + (Number(item.periodPaid) || 0), 0);
+      } else {
+        return filteredLedger.reduce((sum, item) => sum + (Number(item.total_paid) || 0), 0);
+      }
+    }
+  }, [activeView, filteredTransactions, filteredLedger, dateRange]);
 
   return (
     <div className="space-y-6">
@@ -1459,57 +1654,164 @@ export default function Reports() {
 
       {/* Filters */}
       {activeView === 'collections' ? (
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center gap-4">
-          <div className="flex-1 min-w-[280px]">
-            <input 
-              type="text"
-              placeholder="Search student / txn"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-lg border border-slate-200 bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm font-medium"
-            />
-          </div>
-
-          <div className="w-52 relative">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">From Date</span>
-              {dateRange.from && (
-                <span className="text-[9px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded normal-case tracking-normal">
-                  {formatAppDate(dateRange.from)}
-                </span>
-              )}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          {/* Top row: Search input, Date Sort Order toggle (Top to Bottom / Bottom to Top), and Results */}
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div className="flex-1 min-w-[280px] space-y-1.5">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                <Search size={12} className="text-blue-600" />
+                Search Collections
+              </label>
+              <div className="relative">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
+                <input 
+                  type="text"
+                  placeholder="Search by student name, roll number, transaction ID, payment mode..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="w-full pl-10 pr-9 py-2.5 rounded-xl border border-slate-200 bg-slate-50/60 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm font-medium"
+                />
+                {search && (
+                  <button 
+                    onClick={() => setSearch('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
             </div>
-            <input 
-              type="date"
-              value={dateRange.from}
-              onChange={e => setDateRange({...dateRange, from: e.target.value})}
-              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white font-medium text-slate-700"
-            />
-          </div>
 
-          <div className="w-52 relative">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">To Date</span>
-              {dateRange.to && (
-                <span className="text-[9px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded normal-case tracking-normal">
-                  {formatAppDate(dateRange.to)}
-                </span>
-              )}
+            {/* Date Sort Order Toggle */}
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                <ArrowDownUp size={12} className="text-blue-600" />
+                Report Date Order
+              </label>
+              <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200 shadow-inner">
+                <button
+                  type="button"
+                  onClick={() => setDateSortOrder('desc')}
+                  className={cn(
+                    "px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5",
+                    dateSortOrder === 'desc' 
+                      ? "bg-slate-900 text-white shadow-sm" 
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                  )}
+                  title="Latest transactions at top, moving down to earlier dates"
+                >
+                  <ArrowDown size={14} className={dateSortOrder === 'desc' ? "text-blue-400" : ""} />
+                  Top to Bottom (Newest First)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDateSortOrder('asc')}
+                  className={cn(
+                    "px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5",
+                    dateSortOrder === 'asc' 
+                      ? "bg-slate-900 text-white shadow-sm" 
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                  )}
+                  title="Earliest transactions at top, moving down to newest dates"
+                >
+                  <ArrowUp size={14} className={dateSortOrder === 'asc' ? "text-blue-400" : ""} />
+                  Bottom to Top (Oldest First)
+                </button>
+              </div>
             </div>
-            <input 
-              type="date"
-              value={dateRange.to}
-              onChange={e => setDateRange({...dateRange, to: e.target.value})}
-              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white font-medium text-slate-700"
-            />
+
+            {/* Results Badge */}
+            <div className="bg-emerald-50 px-5 py-2.5 rounded-xl border border-emerald-100 text-center min-w-[110px] shadow-xs">
+              <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Transactions</p>
+              <p className="text-xl font-black text-emerald-700">{filteredTransactions.length}</p>
+            </div>
           </div>
 
-          <button 
-            onClick={refreshData}
-            className="bg-[#007BFF] hover:bg-[#0056B3] text-white px-8 py-2.5 rounded-lg text-sm font-semibold transition-all shadow-sm"
-          >
-            Search
-          </button>
+          {/* Bottom row: Date-wise search / presets / custom range */}
+          <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-4">
+            {/* Quick Presets */}
+            <div className="flex items-center flex-wrap gap-1.5">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1 flex items-center gap-1">
+                <Calendar size={13} className="text-slate-500" />
+                Date Presets:
+              </span>
+              {[
+                { key: 'all', label: 'All Time' },
+                { key: 'today', label: 'Today' },
+                { key: 'yesterday', label: 'Yesterday' },
+                { key: 'this_week', label: 'This Week' },
+                { key: 'this_month', label: 'This Month' },
+                { key: 'last_month', label: 'Last Month' }
+              ].map((p) => (
+                <button
+                  key={p.key}
+                  type="button"
+                  onClick={() => setDatePreset(p.key as any)}
+                  className={cn(
+                    "px-2.5 py-1 rounded-lg text-xs font-bold transition-all",
+                    activePreset === p.key
+                      ? "bg-blue-600 text-white shadow-xs"
+                      : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                  )}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Custom Date Range Picker */}
+            <div className="flex items-center flex-wrap gap-2.5">
+              <div className="relative">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">From Date</span>
+                <input 
+                  type="date"
+                  value={dateRange.from}
+                  onChange={e => setDateRange(prev => ({ ...prev, from: e.target.value }))}
+                  className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+                {dateRange.from && (
+                  <span className="text-[9px] font-bold text-blue-700 block mt-0.5">
+                    {formatAppDate(dateRange.from)}
+                  </span>
+                )}
+              </div>
+
+              <div className="relative">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">To Date</span>
+                <input 
+                  type="date"
+                  value={dateRange.to}
+                  onChange={e => setDateRange(prev => ({ ...prev, to: e.target.value }))}
+                  className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+                {dateRange.to && (
+                  <span className="text-[9px] font-bold text-blue-700 block mt-0.5">
+                    {formatAppDate(dateRange.to)}
+                  </span>
+                )}
+              </div>
+
+              {(dateRange.from || dateRange.to) && (
+                <button
+                  type="button"
+                  onClick={() => setDateRange({ from: '', to: '' })}
+                  className="mt-3 px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold transition-all flex items-center gap-1"
+                  title="Clear date filter"
+                >
+                  <RotateCcw size={12} />
+                  Clear Dates
+                </button>
+              )}
+
+              <button 
+                onClick={refreshData}
+                className="mt-3 bg-blue-600 hover:bg-blue-700 text-white px-5 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-xs flex items-center gap-1.5"
+              >
+                <RefreshCw size={13} />
+                Refresh
+              </button>
+            </div>
+          </div>
         </div>
       ) : (
         <div className="space-y-4">
@@ -1542,24 +1844,182 @@ export default function Reports() {
             </label>
           </div>
 
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-end gap-6">
-            <div className="flex-1 min-w-[300px] space-y-2">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Search Student / Roll</label>
-              <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input 
-                  type="text"
-                  placeholder="Enter student name or roll number..."
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-slate-100 bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all text-sm"
-                />
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+            {/* Top row: Search input, Date Sort Order toggle (Top to Bottom / Bottom to Top), and Results */}
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div className="flex-1 min-w-[280px] space-y-1.5">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                  <Search size={12} className="text-blue-600" />
+                  Search Student / Roll / Plan / Phone
+                </label>
+                <div className="relative">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
+                  <input 
+                    type="text"
+                    placeholder="Enter student name, roll number, course plan, or phone..."
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    className="w-full pl-10 pr-9 py-2.5 rounded-xl border border-slate-200 bg-slate-50/60 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm font-medium"
+                  />
+                  {search && (
+                    <button 
+                      onClick={() => setSearch('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Date Sort Order Option: Top to Bottom vs Bottom to Top */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                  <ArrowDownUp size={12} className="text-blue-600" />
+                  Report Date Order
+                </label>
+                <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200 shadow-inner">
+                  <button
+                    type="button"
+                    onClick={() => setDateSortOrder('desc')}
+                    className={cn(
+                      "px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5",
+                      dateSortOrder === 'desc' 
+                        ? "bg-slate-900 text-white shadow-sm" 
+                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                    )}
+                    title="Latest payment dates at top, moving down to earlier dates"
+                  >
+                    <ArrowDown size={14} className={dateSortOrder === 'desc' ? "text-blue-400" : ""} />
+                    Top to Bottom (Newest First)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDateSortOrder('asc')}
+                    className={cn(
+                      "px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5",
+                      dateSortOrder === 'asc' 
+                        ? "bg-slate-900 text-white shadow-sm" 
+                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                    )}
+                    title="Earliest payment dates at top, moving down to latest dates"
+                  >
+                    <ArrowUp size={14} className={dateSortOrder === 'asc' ? "text-blue-400" : ""} />
+                    Bottom to Top (Oldest First)
+                  </button>
+                </div>
+              </div>
+
+              {/* Results badge */}
+              <div className="bg-emerald-50 px-5 py-2.5 rounded-xl border border-emerald-100 text-center min-w-[110px] shadow-xs">
+                <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Matching</p>
+                <p className="text-xl font-black text-emerald-700">{filteredLedger.length} <span className="text-xs font-normal text-emerald-600">students</span></p>
               </div>
             </div>
 
-            <div className="bg-emerald-50 px-6 py-2.5 rounded-xl border border-emerald-100 text-center min-w-[100px]">
-              <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Results</p>
-              <p className="text-xl font-black text-emerald-700">{filteredLedger.length}</p>
+            {/* Bottom row: Date-wise search / presets / custom range */}
+            <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-4">
+              {/* Quick Presets */}
+              <div className="flex items-center flex-wrap gap-1.5">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1 flex items-center gap-1">
+                  <Calendar size={13} className="text-slate-500" />
+                  Date Presets:
+                </span>
+                {[
+                  { key: 'all', label: 'All Time' },
+                  { key: 'today', label: 'Today' },
+                  { key: 'yesterday', label: 'Yesterday' },
+                  { key: 'this_week', label: 'This Week' },
+                  { key: 'this_month', label: 'This Month' },
+                  { key: 'last_month', label: 'Last Month' }
+                ].map((p) => (
+                  <button
+                    key={p.key}
+                    type="button"
+                    onClick={() => setDatePreset(p.key as any)}
+                    className={cn(
+                      "px-2.5 py-1 rounded-lg text-xs font-bold transition-all",
+                      activePreset === p.key
+                        ? "bg-blue-600 text-white shadow-xs"
+                        : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                    )}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Custom Date Range Picker */}
+              <div className="flex items-center flex-wrap gap-2.5">
+                <div className="relative">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">From Date</span>
+                  <input 
+                    type="date"
+                    value={dateRange.from}
+                    onChange={e => setDateRange(prev => ({ ...prev, from: e.target.value }))}
+                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                  {dateRange.from && (
+                    <span className="text-[9px] font-bold text-blue-700 block mt-0.5">
+                      {formatAppDate(dateRange.from)}
+                    </span>
+                  )}
+                </div>
+
+                <div className="relative">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">To Date</span>
+                  <input 
+                    type="date"
+                    value={dateRange.to}
+                    onChange={e => setDateRange(prev => ({ ...prev, to: e.target.value }))}
+                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                  {dateRange.to && (
+                    <span className="text-[9px] font-bold text-blue-700 block mt-0.5">
+                      {formatAppDate(dateRange.to)}
+                    </span>
+                  )}
+                </div>
+
+                {(dateRange.from || dateRange.to) && (
+                  <button
+                    type="button"
+                    onClick={() => setDateRange({ from: '', to: '' })}
+                    className="mt-3 px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold transition-all flex items-center gap-1"
+                    title="Clear date filter"
+                  >
+                    <RotateCcw size={12} />
+                    Clear Dates
+                  </button>
+                )}
+
+                {/* Filter mode toggle when date filter active */}
+                {(dateRange.from || dateRange.to) && (
+                  <div className="mt-3 flex items-center p-0.5 bg-slate-100 rounded-lg border border-slate-200 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setLedgerFilterMode('all')}
+                      className={cn(
+                        "px-2.5 py-1 rounded text-xs font-bold transition-all",
+                        ledgerFilterMode === 'all' ? "bg-white text-slate-800 shadow-xs" : "text-slate-500 hover:text-slate-800"
+                      )}
+                    >
+                      All Students
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLedgerFilterMode('with_transactions')}
+                      className={cn(
+                        "px-2.5 py-1 rounded text-xs font-bold transition-all flex items-center gap-1",
+                        ledgerFilterMode === 'with_transactions' ? "bg-white text-emerald-800 shadow-xs" : "text-slate-500 hover:text-slate-800"
+                      )}
+                    >
+                      <CheckCircle2 size={12} className="text-emerald-600" />
+                      Paid in Selected Dates
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1572,13 +2032,28 @@ export default function Reports() {
             <TrendingUp size={32} />
           </div>
           <div>
-            <h4 className="text-slate-400 text-xs font-bold uppercase tracking-widest">Total Collection in Period</h4>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h4 className="text-slate-400 text-xs font-bold uppercase tracking-widest">
+                {dateRange.from || dateRange.to ? 'Total Collection in Period' : 'Total Collection'}
+              </h4>
+              <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 text-[10px] font-semibold border border-slate-700">
+                {dateSortOrder === 'desc' ? '↓ Top to Bottom (Newest First)' : '↑ Bottom to Top (Oldest First)'}
+              </span>
+            </div>
             <p className="text-4xl font-black mt-1">₹{(totalAmount || 0).toLocaleString()}</p>
+            {(dateRange.from || dateRange.to) && (
+              <p className="text-xs text-emerald-400 font-medium mt-1">
+                Period: {dateRange.from ? formatAppDate(dateRange.from) : 'Beginning'} to {dateRange.to ? formatAppDate(dateRange.to) : 'Present'}
+              </p>
+            )}
           </div>
         </div>
         <div className="hidden md:block text-right">
           <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Report Generated</p>
           <p className="text-sm font-medium mt-1">{format(new Date(), 'dd MMMM yyyy • hh:mm a')}</p>
+          <p className="text-xs text-slate-400 mt-0.5">
+            {activeView === 'collections' ? `${filteredTransactions.length} transactions` : `${filteredLedger.length} students`} matching
+          </p>
         </div>
       </div>
 
@@ -1590,7 +2065,28 @@ export default function Reports() {
               <thead>
                 <tr className="bg-[#343A40]">
                   <th className="py-3 px-4 text-xs font-bold text-white border border-slate-200 w-16">ID</th>
-                  <th className="py-3 px-4 text-xs font-bold text-white border border-slate-200">Date</th>
+                  <th 
+                    onClick={() => setDateSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')}
+                    className="py-3 px-4 text-xs font-bold text-white border border-slate-200 cursor-pointer hover:bg-slate-800 transition-colors select-none group"
+                    title={`Click to sort date ${dateSortOrder === 'desc' ? 'Bottom to Top (Oldest First)' : 'Top to Bottom (Newest First)'}`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Date</span>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/30 text-blue-200 text-[10px] font-bold group-hover:bg-blue-500/50 transition-colors">
+                        {dateSortOrder === 'desc' ? (
+                          <>
+                            <ArrowDown size={11} className="text-blue-300" />
+                            Top to Bottom
+                          </>
+                        ) : (
+                          <>
+                            <ArrowUp size={11} className="text-blue-300" />
+                            Bottom to Top
+                          </>
+                        )}
+                      </span>
+                    </div>
+                  </th>
                   <th className="py-3 px-4 text-xs font-bold text-white border border-slate-200">Student</th>
                   <th className="py-3 px-4 text-xs font-bold text-white border border-slate-200">Txn</th>
                   <th className="py-3 px-4 text-xs font-bold text-white border border-slate-200">Mode</th>
@@ -1700,16 +2196,37 @@ export default function Reports() {
                   <th className="py-4 px-6 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Student / Roll</th>
                   <th className="py-4 px-6 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Fee Plan</th>
                   <th className="py-4 px-6 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Total Due</th>
-                  <th className="py-4 px-6 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Total Paid</th>
+                  <th className="py-4 px-6 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">
+                    {dateRange.from || dateRange.to ? 'Period Paid' : 'Total Paid'}
+                  </th>
                   <th className="py-4 px-6 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Balance</th>
-                  <th className="py-4 px-6 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Date-wise Ledger</th>
+                  <th 
+                    onClick={() => setDateSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')}
+                    className="py-4 px-6 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center cursor-pointer hover:text-slate-800 select-none group"
+                    title={`Click to sort date ${dateSortOrder === 'desc' ? 'Bottom to Top (Oldest First)' : 'Top to Bottom (Newest First)'}`}
+                  >
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-100 group-hover:bg-slate-200 transition-colors">
+                      <span>Date-wise Ledger</span>
+                      <span className="inline-flex items-center gap-0.5 text-blue-700 font-extrabold text-[10px]">
+                        {dateSortOrder === 'desc' ? (
+                          <>
+                            <ArrowDown size={11} /> Top to Bottom
+                          </>
+                        ) : (
+                          <>
+                            <ArrowUp size={11} /> Bottom to Top
+                          </>
+                        )}
+                      </span>
+                    </div>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {filteredLedger.map(item => {
                   const balance = (item.total_due || 0) - (item.total_paid || 0);
                   const isExpanded = expandedStudentId === item.id;
-                  const txs = item.transactions || [];
+                  const txs = (item as any).displayedTransactions || item.transactions || [];
 
                   return (
                     <React.Fragment key={item.id}>
@@ -1759,7 +2276,14 @@ export default function Reports() {
                           <p className="text-sm font-bold text-slate-900">₹{(item.total_due || 0).toLocaleString()}</p>
                         </td>
                         <td className="py-4 px-6 text-right">
-                          <p className="text-sm font-bold text-emerald-600">₹{(item.total_paid || 0).toLocaleString()}</p>
+                          {(dateRange.from || dateRange.to) ? (
+                            <div>
+                              <p className="text-sm font-bold text-emerald-600">₹{((item as any).periodPaid || 0).toLocaleString()}</p>
+                              <p className="text-[10px] text-slate-400 font-medium">Total: ₹{(item.total_paid || 0).toLocaleString()}</p>
+                            </div>
+                          ) : (
+                            <p className="text-sm font-bold text-emerald-600">₹{(item.total_paid || 0).toLocaleString()}</p>
+                          )}
                         </td>
                         <td className="py-4 px-6 text-right">
                           <p className={cn(
@@ -1776,7 +2300,7 @@ export default function Reports() {
                               setExpandedStudentId(isExpanded ? null : item.id);
                             }}
                             className={cn(
-                              "px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 mx-auto border",
+                              "px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 mx-auto border shadow-xs",
                               isExpanded 
                                 ? "bg-slate-800 text-white border-slate-800" 
                                 : "bg-white text-blue-600 border-blue-200 hover:bg-blue-50"
@@ -1785,6 +2309,11 @@ export default function Reports() {
                             <History size={13} />
                             {isExpanded ? 'Hide Ledger' : `View Ledger (${txs.length})`}
                           </button>
+                          {(item as any).latestTxDateStr && (
+                            <p className="text-[10px] font-mono text-slate-500 mt-1">
+                              Latest: {formatDateDDMMYYYY((item as any).latestTxDateStr)}
+                            </p>
+                          )}
                         </td>
                       </tr>
 
@@ -1798,12 +2327,33 @@ export default function Reports() {
                                     <History className="text-blue-600" size={16} />
                                     Student Payment Ledger — {cleanVal(item.name)} (Roll: {cleanVal(item.roll_no)})
                                   </h5>
-                                  <p className="text-xs text-slate-500">Date-wise chronological record of all payments received</p>
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    <p className="text-xs text-slate-500">
+                                      Order: <span className="font-semibold text-slate-700">{dateSortOrder === 'desc' ? 'Top to Bottom (Newest First)' : 'Bottom to Top (Oldest First)'}</span>
+                                    </p>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setDateSortOrder(prev => prev === 'desc' ? 'asc' : 'desc');
+                                      }}
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-colors"
+                                      title="Toggle order Top to Bottom vs Bottom to Top"
+                                    >
+                                      <ArrowDownUp size={10} />
+                                      Toggle Order
+                                    </button>
+                                  </div>
                                 </div>
                                 <div className="flex items-center gap-3 text-xs font-bold">
                                   <span className="px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg">
                                     Course Fee: ₹{(item.total_due || 0).toLocaleString()}
                                   </span>
+                                  {(dateRange.from || dateRange.to) && (
+                                    <span className="px-2.5 py-1 bg-blue-100 text-blue-800 rounded-lg">
+                                      In Period: ₹{((item as any).periodPaid || 0).toLocaleString()}
+                                    </span>
+                                  )}
                                   <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-lg">
                                     Total Paid: ₹{(item.total_paid || 0).toLocaleString()}
                                   </span>
