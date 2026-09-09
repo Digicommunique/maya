@@ -182,7 +182,7 @@ export default function App() {
                         <h1 className="font-bold text-base sm:text-lg leading-tight truncate" title={orgSettings?.name || "DCEDUPayFee"}>
                           {orgSettings?.name || "DCEDUPayFee"}
                         </h1>
-                        <p className="text-[11px] text-slate-500 font-medium tracking-tight truncate">by Digital Communique</p>
+                        <p className="text-[11px] text-slate-500 font-medium tracking-tight truncate">Fee Management System</p>
                       </div>
                     </div>
                     {isMobile && (
@@ -295,10 +295,6 @@ export default function App() {
                       </Routes>
                     </motion.div>
                   </AnimatePresence>
-
-                  <footer className="mt-8 pt-4 border-t border-slate-200/60 text-center text-slate-400 text-[10px] sm:text-xs font-semibold tracking-wide uppercase">
-                    Software Developed by Digital Communique Private Limited
-                  </footer>
                 </div>
               </main>
             </div>

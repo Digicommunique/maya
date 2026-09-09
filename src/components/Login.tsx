@@ -128,7 +128,7 @@ export default function Login({ onLogin, orgSettings }: LoginProps) {
               DCfeePay
             </p>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
-              DIGITAL COMMUNIQUE PRIVATE LIMITED
+              Fee Management System
             </p>
           </div>
 
@@ -314,13 +314,6 @@ export default function Login({ onLogin, orgSettings }: LoginProps) {
           </div>
         )}
       </AnimatePresence>
-
-      {/* Software Developer Footer */}
-      <footer className="text-center pt-4">
-        <p className="text-[11px] font-bold text-slate-400 tracking-wide uppercase">
-          Software Developed by Digital Communique Private Limited
-        </p>
-      </footer>
     </div>
   );
 }

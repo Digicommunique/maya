@@ -602,7 +602,7 @@ export default function FeeCollection({ user }: { user?: any }) {
       paymentSection = `*Payment Breakdown (${lastTx.splitTransactions.length} Transactions):*\n${splitItems}\n\n*Total Paid Amount: ₹${amountPaid}*`;
     }
 
-    const msg = `🚩 *PAYMENT RECEIPT*\n*${orgName.toUpperCase()}*\n\nReceipt No: ${receiptNo}\nDate: ${txDateStr}\n\n*Student Details:*\nName: ${cleanVal(lastTx.student_name)}\nRoll No: ${cleanVal(lastTx.roll_no)}\nFather's Name: ${cleanVal(lastTx.guardian_name || 'N/A')}\nBranch: ${cleanVal(lastTx.branch_name || lastTx.branch || 'N/A')}\nSemester: ${cleanVal(lastTx.semester_name || lastTx.course || 'N/A')}\nSession: ${cleanVal(lastTx.academic_term || '2026-27')}\n\n*Payment Details:*\n${paymentSection}\n\nThank you for your payment!\nSoftware Developed by Digital Communique Private Limited`;
+    const msg = `🚩 *PAYMENT RECEIPT*\n*${orgName.toUpperCase()}*\n\nReceipt No: ${receiptNo}\nDate: ${txDateStr}\n\n*Student Details:*\nName: ${cleanVal(lastTx.student_name)}\nRoll No: ${cleanVal(lastTx.roll_no)}\nFather's Name: ${cleanVal(lastTx.guardian_name || 'N/A')}\nBranch: ${cleanVal(lastTx.branch_name || lastTx.branch || 'N/A')}\nSemester: ${cleanVal(lastTx.semester_name || lastTx.course || 'N/A')}\nSession: ${cleanVal(lastTx.academic_term || '2026-27')}\n\n*Payment Details:*\n${paymentSection}\n\nThank you for your payment!`;
 
     const encodedMsg = encodeURIComponent(msg);
     const targetPhone = cleanPhone ? (cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone) : '';
@@ -958,7 +958,7 @@ export default function FeeCollection({ user }: { user?: any }) {
     }
 
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    const orgName = settings?.org_name || 'DIGITAL COMMUNIQUE PRIVATE LIMITED';
+    const orgName = settings?.org_name || 'MAYA GROUP OF INSTITUTIONS';
     const totalAmount = filteredRecentTxs.reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
 
     doc.setFontSize(16);
@@ -1019,7 +1019,7 @@ export default function FeeCollection({ user }: { user?: any }) {
       alert("No transactions available to print.");
       return;
     }
-    const orgName = settings?.org_name || 'DIGITAL COMMUNIQUE PRIVATE LIMITED';
+    const orgName = settings?.org_name || 'MAYA GROUP OF INSTITUTIONS';
     const totalAmount = filteredRecentTxs.reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
 
     const modeTotals: Record<string, number> = {};
@@ -1113,7 +1113,7 @@ export default function FeeCollection({ user }: { user?: any }) {
 
             <div class="flex justify-between items-end pt-8 text-xs text-slate-500">
               <div>
-                <p class="font-bold text-slate-700">Digital Communique Fee System</p>
+                <p class="font-bold text-slate-700">Fee Management System</p>
                 <p>System Generated Report</p>
               </div>
               <div class="text-center border-t border-slate-400 pt-2 min-w-[150px]">

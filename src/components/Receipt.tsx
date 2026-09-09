@@ -215,13 +215,6 @@ export default function Receipt({ transaction, settings }: ReceiptProps) {
           <div className="border-b border-slate-900 w-full" />
         </div>
       </div>
-
-      {/* Software Credit Footer */}
-      <div className="pt-6 border-t border-slate-100 text-center">
-        <p className="text-[10px] text-slate-400 font-medium tracking-wide uppercase">
-          Software Developed by Digital Communique Private Limited
-        </p>
-      </div>
     </div>
   );
 }

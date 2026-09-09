@@ -635,7 +635,7 @@ export default function StudentDirectory({ user }: { user?: any }) {
     const totalPaid = Number(student.total_paid || 0);
     const pendingBalance = totalDue - totalPaid;
 
-    const msg = `🚩 *FEE REMINDER*\n*MAYA GROUP OF INSTITUTIONS*\n\nDear Parent / Student,\n*Student Name:* ${cleanVal(student.name)}\n*Roll No:* ${cleanVal(student.roll_no)}\n*Branch:* ${cleanVal(student.branch_name)} (${cleanVal(student.semester_name)})\n\nThis is a gentle reminder regarding the outstanding college fee balance:\nTotal Program Fee: ₹${totalDue.toLocaleString()}\nTotal Amount Paid: ₹${totalPaid.toLocaleString()}\n*Pending Due Balance: ₹${pendingBalance.toLocaleString()}*\n\nPlease kindly clear the due amount at your earliest convenience.\n\nRegards,\nAccounts Department\nDigital Communique / Maya Group`;
+    const msg = `🚩 *FEE REMINDER*\n*MAYA GROUP OF INSTITUTIONS*\n\nDear Parent / Student,\n*Student Name:* ${cleanVal(student.name)}\n*Roll No:* ${cleanVal(student.roll_no)}\n*Branch:* ${cleanVal(student.branch_name)} (${cleanVal(student.semester_name)})\n\nThis is a gentle reminder regarding the outstanding college fee balance:\nTotal Program Fee: ₹${totalDue.toLocaleString()}\nTotal Amount Paid: ₹${totalPaid.toLocaleString()}\n*Pending Due Balance: ₹${pendingBalance.toLocaleString()}*\n\nPlease kindly clear the due amount at your earliest convenience.\n\nRegards,\nAccounts Department\nMaya Group of Institutions`;
 
     const encodedMsg = encodeURIComponent(msg);
     const targetPhone = cleanPhone ? (cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone) : '';
@@ -651,7 +651,7 @@ export default function StudentDirectory({ user }: { user?: any }) {
     const phone = cleanVal(student.phone || '');
     const cleanPhone = phone.replace(/[^0-9]/g, '');
 
-    const msg = `📋 *STUDENT PROFILE DETAILS*\n*MAYA GROUP OF INSTITUTIONS*\n\n*Name:* ${cleanVal(student.name)}\n*Roll No:* ${cleanVal(student.roll_no)}\n*Father's Name:* ${cleanVal(student.guardian_name)}\n*Phone:* ${phone}\n*Branch:* ${cleanVal(student.branch_name)}\n*Semester:* ${cleanVal(student.semester_name)}\n*Session:* ${cleanVal(student.session_name)}\n*Fee Plan:* ${cleanVal(student.plan_name)}\n*Total Paid:* ₹${(student.total_paid || 0).toLocaleString()}\n*Pending Due:* ₹${((student.total_due || 0) - (student.total_paid || 0)).toLocaleString()}\n\nSoftware Developed by Digital Communique Private Limited`;
+    const msg = `📋 *STUDENT PROFILE DETAILS*\n*MAYA GROUP OF INSTITUTIONS*\n\n*Name:* ${cleanVal(student.name)}\n*Roll No:* ${cleanVal(student.roll_no)}\n*Father's Name:* ${cleanVal(student.guardian_name)}\n*Phone:* ${phone}\n*Branch:* ${cleanVal(student.branch_name)}\n*Semester:* ${cleanVal(student.semester_name)}\n*Session:* ${cleanVal(student.session_name)}\n*Fee Plan:* ${cleanVal(student.plan_name)}\n*Total Paid:* ₹${(student.total_paid || 0).toLocaleString()}\n*Pending Due:* ₹${((student.total_due || 0) - (student.total_paid || 0)).toLocaleString()}`;
 
     const encodedMsg = encodeURIComponent(msg);
     const targetPhone = cleanPhone ? (cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone) : '';
