@@ -1242,7 +1242,7 @@ export default function FeeCollection({ user }: { user?: any }) {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
+    <div className="w-full space-y-8">
       {!isSuccess ? (
         <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden">
           <div className="p-5 sm:p-8 bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -2043,13 +2043,13 @@ export default function FeeCollection({ user }: { user?: any }) {
                     />
                   </th>
                 )}
-                <th className="py-3 px-4 font-semibold">Receipt / ID</th>
-                <th className="py-3 px-4 font-semibold">Date & Time</th>
-                <th className="py-3 px-4 font-semibold">Student</th>
-                <th className="py-3 px-4 font-semibold">Txn ID / Mode</th>
-                <th className="py-3 px-4 font-semibold">Term</th>
-                <th className="py-3 px-4 font-semibold text-right">Amount</th>
-                <th className="py-3 px-4 font-semibold text-center w-36">Action</th>
+                <th className="py-3 px-4 font-semibold whitespace-nowrap">Receipt / ID</th>
+                <th className="py-3 px-4 font-semibold whitespace-nowrap min-w-[130px]">Date & Time</th>
+                <th className="py-3 px-4 font-semibold min-w-[150px]">Student</th>
+                <th className="py-3 px-4 font-semibold min-w-[150px]">Txn ID / Mode</th>
+                <th className="py-3 px-4 font-semibold whitespace-nowrap">Term</th>
+                <th className="py-3 px-4 font-semibold text-right whitespace-nowrap">Amount</th>
+                <th className="py-3 px-4 font-semibold text-center whitespace-nowrap min-w-[180px]">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
@@ -2067,7 +2067,7 @@ export default function FeeCollection({ user }: { user?: any }) {
                         />
                       </td>
                     )}
-                    <td className="py-3 px-4 font-mono font-bold text-slate-900">
+                    <td className="py-3 px-4 font-mono font-bold text-slate-900 whitespace-nowrap">
                       <div>#DC-{1000 + tx.id}</div>
                       {tx.is_edited && (
                         <span className="inline-block mt-0.5 px-1.5 py-0.5 bg-amber-500 text-white rounded text-[9px] font-bold uppercase tracking-wider">
@@ -2093,14 +2093,14 @@ export default function FeeCollection({ user }: { user?: any }) {
                         {cleanVal(tx.payment_mode || 'UPI Digital')}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-slate-600">
+                    <td className="py-3 px-4 text-slate-600 whitespace-nowrap">
                       {cleanVal(tx.academic_term || '-')}
                     </td>
-                    <td className="py-3 px-4 text-right font-black text-emerald-600 text-sm">
+                    <td className="py-3 px-4 text-right font-black text-emerald-600 text-sm whitespace-nowrap">
                       ₹{Number(tx.amount || 0).toLocaleString()}
                     </td>
-                    <td className="py-3 px-4 text-center">
-                      <div className="flex items-center justify-center gap-1.5">
+                    <td className="py-3 px-4 text-center whitespace-nowrap">
+                      <div className="flex items-center justify-center gap-1.5 flex-nowrap">
                         <button 
                           onClick={() => viewHistoryReceipt(tx)}
                           className="bg-[#17A2B8] hover:bg-[#138496] text-white px-2 py-1.2 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1"

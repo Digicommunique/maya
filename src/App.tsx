@@ -8,7 +8,9 @@ import {
   PlusCircle,
   LogOut,
   Menu,
-  X
+  X,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
@@ -26,7 +28,15 @@ import { DEFAULT_MAYA_LOGO_BASE64 } from './assets/logoData';
 export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) return false;
+    try {
+      const saved = localStorage.getItem('dc_sidebar_open');
+      return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
   const [isMobile, setIsMobile] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -66,9 +76,9 @@ export default function App() {
     setIsInitialized(true);
 
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 1024);
-      if (window.innerWidth < 1024) setIsSidebarOpen(false);
-      else setIsSidebarOpen(true);
+      const mobile = window.innerWidth < 1024;
+      setIsMobile(mobile);
+      if (mobile) setIsSidebarOpen(false);
     };
     checkMobile();
     window.addEventListener('resize', checkMobile);
@@ -84,6 +94,16 @@ export default function App() {
       window.removeEventListener('org-settings-updated', handleSettingsUpdate);
     };
   }, []);
+
+  const toggleSidebar = () => {
+    setIsSidebarOpen(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('dc_sidebar_open', String(next));
+      } catch {}
+      return next;
+    });
+  };
 
   const handleLogin = (userData: any) => {
     setUser(userData);
@@ -163,8 +183,10 @@ export default function App() {
               {/* Sidebar */}
               <aside 
                 className={cn(
-                  "fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0",
-                  !isSidebarOpen && "-translate-x-full lg:hidden"
+                  "fixed inset-y-0 left-0 z-50 bg-white border-r border-slate-200 transition-all duration-300 ease-in-out lg:relative",
+                  isSidebarOpen 
+                    ? "w-64 translate-x-0" 
+                    : "-translate-x-full lg:w-0 lg:overflow-hidden lg:border-r-0 lg:opacity-0"
                 )}
               >
                 <div className="h-full flex flex-col">
@@ -240,13 +262,36 @@ export default function App() {
               {/* Main Content */}
               <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
                 <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 sticky top-0 z-40">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 sm:gap-3">
                     <button 
-                      onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                      className="p-2 text-slate-600 hover:bg-slate-100 rounded-xl lg:hidden focus:outline-none"
+                      onClick={toggleSidebar}
+                      className="p-2 text-slate-600 hover:bg-slate-100 rounded-xl focus:outline-none transition-colors"
                       aria-label="Toggle Navigation Menu"
+                      title={isSidebarOpen ? "Collapse sidebar (Expand page view)" : "Show sidebar"}
                     >
-                      {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
+                      <Menu size={20} />
+                    </button>
+                    <button
+                      onClick={toggleSidebar}
+                      className={cn(
+                        "hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shadow-2xs",
+                        !isSidebarOpen 
+                          ? "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100" 
+                          : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                      )}
+                      title={!isSidebarOpen ? "Restore standard view with sidebar" : "Expand page to maximum width"}
+                    >
+                      {!isSidebarOpen ? (
+                        <>
+                          <Minimize2 size={14} className="text-blue-600" />
+                          <span>Standard View</span>
+                        </>
+                      ) : (
+                        <>
+                          <Maximize2 size={14} className="text-slate-600" />
+                          <span>Expand View</span>
+                        </>
+                      )}
                     </button>
                     <h2 className="text-base sm:text-lg font-bold text-slate-800 capitalize truncate">
                       {menuItems.find(m => m.id === activeTab)?.label}
@@ -273,7 +318,10 @@ export default function App() {
                   </div>
                 </header>
 
-                <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 lg:p-8 flex flex-col justify-between min-h-[calc(100vh-4rem)]">
+                <div className={cn(
+                  "flex-1 overflow-y-auto flex flex-col justify-between min-h-[calc(100vh-4rem)] transition-all duration-300",
+                  !isSidebarOpen ? "p-3 sm:p-5 lg:p-6" : "p-3.5 sm:p-6 lg:p-8"
+                )}>
                   <AnimatePresence mode="wait">
                     <motion.div
                       key={location.pathname}
